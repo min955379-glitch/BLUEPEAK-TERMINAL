@@ -23,37 +23,80 @@ function ratioAtLeast(foreground, background, minimum, label) {
   assert.ok(result >= minimum, `${label}: ${result.toFixed(2)}:1 < ${minimum}:1`);
 }
 
-assert.match(css, /--bp-bg-canvas:#060E1A/);
-assert.match(css, /--bp-chart-bg:#07111F/);
+assert.match(css, /--bp-bg-canvas:#070D19/);
+assert.match(css, /--bp-chart-bg:#0B1220/);
 assert.match(css, /:root\[data-theme="light"\]/);
-assert.match(css, /--bp-bg-canvas:#EFE9DC/);
-assert.match(css, /--bp-chart-bg:#FAF7F0/);
+assert.match(css, /--bp-bg-canvas:#F1F5F9/);
+assert.match(css, /--bp-chart-bg:#FFFFFF/);
 assert.match(css, /select option\{background:var\(--bp-bg-primary\);color:var\(--bp-text-primary\)\}/);
 assert.match(css, /input::placeholder,textarea::placeholder\{color:var\(--bp-text-muted\)!important;opacity:\.9\}/);
 assert.match(ui, /data-bp-theme-toggle/);
+assert.match(ui, /window\.BluePeakTheme/);
 assert.match(ui, /bp-theme-change/);
 assert.match(index, /id="theme"/);
+assert.match(index, /function getChartPalette\(\)/);
+assert.match(index, /window\.addEventListener\('bp-theme-change'/);
+assert.match(index, /#089981/);
+assert.match(index, /#F23645/);
+assert.match(css, /\.asset-delta\.up[^}]*color:#089981/);
+assert.match(css, /\.asset-delta\.down[^}]*color:#F23645/);
+assert.match(css, /\.change\.up[^}]*color:#089981/);
+assert.match(css, /\.change\.down[^}]*color:#F23645/);
+assert.match(index, /id="zigzag-toggle"/);
+assert.match(index, /id="zigzag-sensitivity"/);
+assert.match(index, /window\.BPPatterns\.zigZag/);
+assert.match(index, /volumeBull:'rgba\(8, 153, 129, 0\.38\)'/);
+assert.match(index, /volumeBear:'rgba\(242, 54, 69, 0\.38\)'/);
+assert.match(index, /col=up\?bullish:bearish;ctx\.strokeStyle=col;ctx\.fillStyle=col/);
+assert.match(index, /ctx\.strokeStyle=last\.close>=last\.open\?bullish:bearish/);
+assert.match(index, /bp-theme-change'[^\n]*drawChart\(\)/);
+assert.match(index, /saveIndicators\(\);drawChart\(\)/);
+assert.match(index, /id="zigzag-sensitivity"[^>]*aria-label/);
 assert.match(adminDashboard, /data-bp-theme-toggle/);
 assert.match(adminUsers, /data-bp-theme-toggle/);
 assert.match(gateway, /bpTheme=localStorage\.getItem\("bp-theme"\)/);
 
-// Dark-mode normal/primary text and accents against each principal surface.
-for (const surface of ['#060E1A', '#0C1B30', '#122642']) {
-  ratioAtLeast('#FAF6EE', surface, 7, `dark primary text on ${surface}`);
-  ratioAtLeast('#DFD8C8', surface, 7, `dark secondary text on ${surface}`);
-  ratioAtLeast('#A8B5C8', surface, 4.5, `dark muted text on ${surface}`);
-  ratioAtLeast('#DEB65E', surface, 4.5, `dark gold accent on ${surface}`);
+// Dark-mode text and accents against each principal slate surface.
+for (const surface of ['#070D19', '#0E172A', '#16223B']) {
+  ratioAtLeast('#F8FAFC', surface, 7, `dark primary text on ${surface}`);
+  ratioAtLeast('#CBD5E1', surface, 7, `dark secondary text on ${surface}`);
+  ratioAtLeast('#94A3B8', surface, 4.5, `dark muted text on ${surface}`);
+  ratioAtLeast('#F59E0B', surface, 4.5, `dark gold accent on ${surface}`);
 }
-ratioAtLeast('#07111F', '#DEB65E', 7, 'dark primary button label');
+ratioAtLeast('#070D19', '#F59E0B', 7, 'dark primary button label');
 
-// Light-mode text and burnished-gold accents against principal paper surfaces.
-for (const surface of ['#EFE9DC', '#FAF7F0', '#F3EDE0']) {
-  ratioAtLeast('#09182C', surface, 7, `light primary text on ${surface}`);
-  ratioAtLeast('#1E3452', surface, 7, `light secondary text on ${surface}`);
-  ratioAtLeast('#4A5E78', surface, 4.5, `light muted text on ${surface}`);
-  ratioAtLeast('#855B0E', surface, 4.5, `light gold accent on ${surface}`);
+// Light-mode text and accessible burnished-gold text against principal paper surfaces.
+for (const surface of ['#F1F5F9', '#FFFFFF', '#F8FAFC']) {
+  ratioAtLeast('#0F172A', surface, 7, `light primary text on ${surface}`);
+  ratioAtLeast('#334155', surface, 7, `light secondary text on ${surface}`);
+  ratioAtLeast('#475569', surface, 4.5, `light muted text on ${surface}`);
+  ratioAtLeast('#A6530A', surface, 4.5, `light gold accent on ${surface}`);
 }
-ratioAtLeast('#FAF6EE', '#102B4E', 7, 'light primary button label');
+ratioAtLeast('#F8FAFC', '#0F172A', 7, 'light primary button label');
+
+const appInline = index.slice(index.indexOf('function getChartPalette()'), index.indexOf('\nasync function loadDepth'));
+assert.doesNotMatch(appInline, /(?:fillStyle|strokeStyle|shadowColor)\s*=\s*['\"]var\(/, 'canvas must not receive raw CSS var() text');
+const paletteSource = appInline.slice(0, appInline.indexOf('function drawChart()')).trim();
+const paletteTokens = {
+  '--bp-chart-zigzag': '#38BDF8', '--bp-accent-gold': '#F59E0B', '--bp-chart-ema': '#64A8FF',
+  '--bp-chart-rsi': '#C4A7FF', '--bp-chart-macd': '#64A8FF', '--bp-chart-signal': '#F0C36D',
+  '--bp-chart-annotation': '#38BDF8'
+};
+function resolvePalette(theme) {
+  const style = { getPropertyValue: name => paletteTokens[name] || '' };
+  const doc = { documentElement: { getAttribute: () => theme }, createElement: () => ({ getContext: () => ({ fillStyle: '#000000' }) }) };
+  const paletteFactory = new Function('document', 'getComputedStyle', `return (${paletteSource});`);
+  return paletteFactory(doc, () => style)();
+}
+for (const [theme, expectedBg] of [['dark', '#0F192D'], ['light', '#FFFFFF']]) {
+  const palette = resolvePalette(theme);
+  assert.equal(palette.canvasTop, expectedBg, `${theme} chart background`);
+  assert.equal(palette.bullish, '#089981');
+  assert.equal(palette.bearish, '#F23645');
+  for (const [name, value] of Object.entries(palette)) {
+    if (typeof value === 'string') assert.doesNotMatch(value, /var\s*\(/i, `${theme} palette ${name} must be a resolved color`);
+  }
+}
 
 // Scan shipped CSS/HTML/JS (not tests or docs) for green-family names or saturated green literals.
 const sourceFiles = [];
@@ -79,7 +122,10 @@ for (const file of sourceFiles) {
     if (delta) hue = max === r ? 60 * (((g - b) / delta) % 6) : max === g ? 60 * ((b - r) / delta + 2) : 60 * ((r - g) / delta + 4);
     if (hue < 0) hue += 360;
     const saturation = max ? delta / max : 0;
-    assert.ok(!(hue >= 75 && hue <= 170 && saturation >= 0.2 && max >= 0.18), `green-family literal ${literal} in ${path.relative(__dirname, file)}`);
+    if (hue >= 75 && hue <= 170 && saturation >= 0.2 && max >= 0.18) {
+      const hex = literal.slice(1, 7).toUpperCase();
+      assert.ok(['089981','26A69A','10B981'].includes(hex) && ['index.html','bluepeak-design-system.css'].includes(path.basename(file)), `unapproved green-family literal ${literal} in ${path.relative(__dirname, file)}`);
+    }
   }
 }
-console.log(`PASS test-theme-contrast: dual theme tokens, >=AA text pairs, AAA primary/button pairs, theme controls, dropdown/placeholder styling, and zero green-family production colors (${sourceFiles.length} shipped source files scanned).`);
+console.log(`PASS test-theme-contrast: dual theme tokens, >=AA text pairs, AAA primary/button pairs, synchronized theme controls, resolved chart palette, universal candle colors, Zig Zag UI, and no unapproved green colors (${sourceFiles.length} shipped source files scanned).`);

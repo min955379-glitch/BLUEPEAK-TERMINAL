@@ -78,9 +78,11 @@ function location(res) { return res.headers.location; }
   assert.doesNotMatch(loginPage.body, /crypto\.randomUUID\(\)\.replaceAll/);
   const designCss = await request('/bluepeak-design-system.css');
   assert.equal(designCss.statusCode, 200, 'shared design tokens must load on signed-out routes');
-  assert.match(designCss.body, /--bp-bg-canvas:#09182C/);
+  assert.match(designCss.headers['content-type'], /^text\/css; charset=utf-8$/);
+  assert.match(designCss.body, /--bp-bg-canvas:#070D19/);
   const uiHelpers = await request('/bluepeak-ui.js');
   assert.equal(uiHelpers.statusCode, 200, 'shared UI helpers must load on signed-out routes');
+  assert.match(uiHelpers.headers['content-type'], /^application\/javascript; charset=utf-8$/);
   assert.match(uiHelpers.body, /bpConfirm/);
   const font = await request('/fonts/inter-latin-variable.woff2');
   assert.equal(font.statusCode, 200, 'local variable fonts must be available to sign-in pages');

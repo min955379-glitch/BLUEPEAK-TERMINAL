@@ -24,6 +24,73 @@
   });
 
   const mean = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
+
+  // Confirmed, alternating swing pivots plus one developing endpoint for chart structure.
+  function zigZag(candles, { deviationPct = null, pivotDepth = 5 } = {}) {
+    if (!Array.isArray(candles) || candles.length < 3) return { pivots: [], deviationPct: Number(deviationPct) || 1.5, pivotDepth: 1 };
+    const depth = Math.max(1, Math.min(20, Math.floor(Number(pivotDepth) || 5)));
+    const data = candles.filter(c => c && [c.high, c.low].every(Number.isFinite));
+    if (data.length < depth * 2 + 1) return { pivots: [], deviationPct: Number(deviationPct) || 1.5, pivotDepth: depth };
+    let volatility = [];
+    for (let i = Math.max(1, data.length - 28); i < data.length; i++) {
+      const c = data[i], p = data[i - 1], tr = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
+      if (Number.isFinite(p.close) && p.close > 0) volatility.push(tr / p.close * 100);
+    }
+    const sortedVol = volatility.slice().sort((a, b) => a - b);
+    const medianVol = sortedVol.length ? sortedVol[Math.floor(sortedVol.length / 2)] : 1;
+    const autoDeviation = Math.max(1.5, Math.min(3, medianVol * 1.5));
+    const threshold = Number.isFinite(Number(deviationPct)) && Number(deviationPct) > 0
+      ? Math.max(0.5, Math.min(8, Number(deviationPct))) : autoDeviation;
+    const candidates = [];
+    for (let i = depth; i < data.length - depth; i++) {
+      const c = data[i];
+      let isHigh = true, isLow = true;
+      for (let j = i - depth; j <= i + depth; j++) {
+        if (j === i) continue;
+        if (data[j].high > c.high || (data[j].high === c.high && j > i)) isHigh = false;
+        if (data[j].low < c.low || (data[j].low === c.low && j > i)) isLow = false;
+      }
+      if (isHigh && isLow) {
+        const close = Number.isFinite(c.close) ? c.close : (c.high + c.low) / 2;
+        candidates.push({ index: i, type: close >= (c.high + c.low) / 2 ? 'high' : 'low', value: close >= (c.high + c.low) / 2 ? c.high : c.low, confirmed: true });
+      } else if (isHigh) candidates.push({ index: i, type: 'high', value: c.high, confirmed: true });
+      else if (isLow) candidates.push({ index: i, type: 'low', value: c.low, confirmed: true });
+    }
+    const pivots = [];
+    for (const candidate of candidates) {
+      const last = pivots.at(-1);
+      if (!last) { pivots.push(candidate); continue; }
+      if (candidate.type === last.type) {
+        const moreExtreme = candidate.type === 'high' ? candidate.value > last.value : candidate.value < last.value;
+        if (moreExtreme) pivots[pivots.length - 1] = candidate;
+        continue;
+      }
+      const swing = Math.abs(candidate.value - last.value) / Math.max(Math.abs(last.value), 1e-12) * 100;
+      if (swing >= threshold) pivots.push(candidate);
+    }
+    if (!pivots.length) {
+      const first = data[0], last = data.at(-1), type = last.close >= first.close ? 'low' : 'high';
+      pivots.push({ index: 0, type, value: type === 'low' ? first.low : first.high, confirmed: true });
+    }
+    const anchor = pivots.at(-1), from = Math.min(data.length - 1, anchor.index + 1);
+    let extreme = null;
+    for (let i = from; i < data.length; i++) {
+      const type = anchor.type === 'high' ? 'low' : 'high', value = type === 'high' ? data[i].high : data[i].low;
+      if (!extreme || (type === 'high' ? value > extreme.value : value < extreme.value)) extreme = { index: i, type, value, confirmed: false };
+    }
+    if (extreme && extreme.index !== anchor.index) {
+      const swing = Math.abs(extreme.value - anchor.value) / Math.max(Math.abs(anchor.value), 1e-12) * 100;
+      if (swing >= threshold) pivots.push(extreme);
+    }
+    const previous = { high: null, low: null };
+    return { pivots: pivots.map(p => {
+      const prior = previous[p.type];
+      const label = p.type === 'high' ? (prior ? (p.value > prior.value ? 'HH' : 'LH') : 'H') : (prior ? (p.value < prior.value ? 'LL' : 'HL') : 'L');
+      if (p.confirmed) previous[p.type] = p;
+      return { ...p, label };
+    }), deviationPct: threshold, pivotDepth: depth };
+  }
+
   function rsiSeries(candles, period = RSI_PERIOD) {
     const out = Array(candles.length).fill(null);
     if (candles.length <= period) return out;
@@ -292,5 +359,5 @@
     return result;
   }
 
-  return { RULES, detect, detectV1, rsiSeries, atrSeries, emaSeries, confirmedPivots, clusterSwings, BACKTEST_HORIZON, SWING_SPAN, MIN_V1_SAMPLE };
+  return { RULES, detect, detectV1, rsiSeries, atrSeries, emaSeries, confirmedPivots, clusterSwings, zigZag, BACKTEST_HORIZON, SWING_SPAN, MIN_V1_SAMPLE };
 });

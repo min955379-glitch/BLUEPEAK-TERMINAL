@@ -22,7 +22,7 @@ The customer terminal excludes the legacy Admin panel and device-only sign-out c
 
 ## Institutional UI and user management
 
-The shared design uses high-contrast navy/ivory/gold tokens, local Inter and JetBrains Mono, responsive layouts, visible focus, loading states, accessible confirmation dialogs, toast notifications, and `/` and `Ctrl/Cmd+K` search shortcuts. The current worktree now adds synchronized Dark and Light themes across customer terminal and admin pages, persistent `bp-theme` preference (dark by default), theme-aware chart rendering, readable form controls/dropdowns, and a theme switch on sign-in and admin views. Positive/active states use gold, navy, or ivory; green-family colors are prohibited in shipped UI sources. These latest contrast/theme updates are local and have not been uploaded or deployed.
+The shared design uses high-contrast navy/ivory/gold tokens, local Inter and JetBrains Mono, responsive layouts, visible focus, loading states, accessible confirmation dialogs, toast notifications, and `/` and `Ctrl/Cmd+K` search shortcuts. Dark and Light themes share a synchronized theme controller and persistent `bp-theme` preference (dark by default); switching theme redraws the chart immediately. Canvas palettes resolve CSS tokens to actual color strings and use theme-appropriate backgrounds, axes, grid, annotations, and overlays. Candles, volume bars, the latest-price line, and market price-change indicators (including ticker/watchlist moves) use the expressly requested trading colors: bullish `#089981`, bearish `#F23645`. This is a narrow chart-only exception; unrelated positive/active UI states remain within the gold/navy/ivory design language. The chart includes a toolbar-enabled Zig Zag overlay with Tight/Standard/Wide sensitivity, confirmed swing pivots, HH/HL/LH/LL labels, and a developing endpoint.
 
 The customer/admin login forms retain their existing server-side auth flows. Admin actions require an authenticated administrator, AAL2 claim, approved admin profile, and active session; those checks are performed in both gateway and Edge Function.
 
@@ -36,8 +36,9 @@ The customer/admin login forms retain their existing server-side auth flows. Adm
 - Added `20261112160047_purge_legacy_soft_deleted_buyers.sql`; Supabase production migration history records it as applied. A preflight query found zero remaining legacy soft-deleted buyers, and post-migration counts remain zero.
 - `secure-bluepeak-admin` is ACTIVE, version 8, with the restricted `list-audit` operation and existing direct-delete protections.
 - The previously requested production test identity `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` remains absent: zero Auth users, profiles, and linked active sessions. Audit history remains.
-- The repository owner uploaded the prior source revision to GitHub. Vercel production deployment `dpl_AbXrMpuxXipHTCfSF8GPtf118EeL` is READY/PROMOTED for commit `d2fdc3b27b67b7a4710274b324bc44bf2dde27c1`. Unauthenticated production smoke checks passed for sign-in pages, public assets, protected-route redirects, and a 401 response from `/api/admin`.
-- The dual-theme/contrast revision described above is newer local work and is not included in that GitHub commit or Vercel deployment. Signed-in customer/admin production visual checks have not been performed.
+- Repository `main` is at commit `17c7cb45a941cc67e41e23bac6a6fa4d53fb96ec`; all 16 application/backend source paths checked against it match. The four release-status documents were refreshed locally after deployment verification and were not part of that push.
+- Vercel deployment `dpl_38r8i8JdDAEcURSqPGgKGsmCM5CT` is READY/PROMOTED for that commit and has the `bluepeak-terminal.vercel.app` alias. Production CSS contains both dark and light token sets; the theme helper and sign-in/admin endpoints return HTTP 200.
+- Unauthenticated HTML requests to `/admin/users` and `/admin/dashboard` redirect to `/admin`, and `/app` redirects to `/`. The protected routes return 401 JSON when requested as non-HTML. Authenticated customer/admin visual verification remains unperformed.
 
 ## Local development and tests
 
@@ -60,10 +61,10 @@ node test-v1.js
 node test-theme-contrast.js
 ```
 
-Current worktree: all six suites, JavaScript syntax checks, JSON validation, and `git diff --check` pass. The contrast test checks required token pairs, theme controls, dropdown/placeholder styling, and scans shipped CSS/HTML/JS for green-family colors. These local source-contract/mock checks do not create users in production and do not substitute for authenticated AAL2 acceptance.
+Current local worktree: all six suites (`test-gateway-auth.js`, `test-admin-user-management.js`, `test-pattern-scanner.js`, `test-asset-scanner.js`, `test-theme-contrast.js`, `test-v1.js`), JavaScript syntax checks, and `git diff --check` pass. The contrast suite checks text contrast, theme controls, universal chart colors, Zig Zag controls, resolved canvas colors (no unresolved `var(--...)` fill/stroke styles), and rejects unapproved green-family literals. These are local source-contract/mock checks; no live browser interaction or authenticated AAL2 acceptance is claimed.
 
 ## Release and archive
 
-The refreshed, verified archive `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` includes the current local UI revision and excludes `.env`, `.vercel`, and `node_modules`. The earlier source revision is on GitHub and Vercel is READY/PROMOTED for its commit; the theme/contrast changes in this archive are not uploaded or deployed. This assistant does not push. The Supabase cleanup migration is applied and `secure-bluepeak-admin` version 8 is active, but the stricter email-validation change in the current Edge Function source still needs deployment.
+The chart/theme/Zig Zag changes in this worktree are local, not committed, uploaded, or deployed. Rebuilt `/home/user/BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` from the full safe project tree (49 files); ZIP integrity and required-file checks passed, and all six suites passed again from an extracted copy. `.env`, `.vercel`, and `node_modules` are excluded. This assistant does not push. The previously verified production build is older and does not include this local chart revision. Authenticated customer/admin visuals and protected workflows require an authorized session and remain unverified.
 
 Never place Supabase service-role credentials, user passwords, TOTP codes, environment files, or deployment credentials in source or the archive. Keep RLS enabled and never grant the browser direct access to profiles, sessions, or audit tables.
