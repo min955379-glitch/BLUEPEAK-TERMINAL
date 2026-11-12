@@ -194,6 +194,9 @@ function location(res) { return res.headers.location; }
   assert.match(portal, /create-user/);
   assert.match(portal, /reset-user-password/);
   assert.match(portal, /revoke-user/);
+  assert.match(portal, /if \(\$\('#users'\)\) loadUsers\(\)/, 'admin users list must load on initial page entry');
+  assert.match(portal, /request timed out/i, 'admin API must time out with a recoverable message');
+  assert.match(portal, /retry\.textContent = 'Retry'/, 'failed user list should offer retry');
 
-  console.log('PASS test-gateway-auth: signed-out/buyer/admin login routing, return-to-login path, customer/admin authorization, AAL2, silent session refresh, expired sessions, logout/cookies, identifier UI and backend wiring, and button preservation.');
+  console.log('PASS test-gateway-auth: signed-out/buyer/admin login routing, return-to-login path, customer/admin authorization, AAL2, silent session refresh, expired sessions, logout/cookies, identifier UI, admin user-list auto-load/retry, and button preservation.');
 })().catch(err => { console.error(err); process.exitCode = 1; });

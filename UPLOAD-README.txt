@@ -1,11 +1,9 @@
-BluePeak admin sign-in route regression fix
+BluePeak Admin Users page loading fix
 
-Patch applies to the latest pushed main commit 3850071 (Add files via upload). Replace these two files in the repository root:
-1. api/gateway.js
-2. test-gateway-auth.js
+Replace these files at the repository root:
+- admin-portal.js
+- test-gateway-auth.js
 
-Behavior: a fresh /admin request shows administrator sign-in. A valid AAL2 admin session redirects /admin to /admin/dashboard. If a buyer/customer session cookie is present, /admin now still shows administrator sign-in instead of redirecting to /app; protected admin pages and admin APIs remain denied to buyers.
+Root cause: the deployed users-page script defines loadUsers() but never calls it on initial page entry, so the HTML's static Loading… row remains. This patch starts the request on page entry, bounds admin API requests to 15 seconds, and shows a clear error with a Retry button if the request fails.
 
-View Website remains a user-clicked /login link in a separate tab (target=_blank, rel=noopener noreferrer). A GET to /login does not mutate the admin cookie. Logging in as a customer in that tab will replace same-origin auth cookies, because browsers share cookies between tabs.
-
-Verification: gateway, scanner, asset, and V1 tests pass; Playwright gateway emulation checked signed-out, buyer-cookie, and AAL2-admin routes, and the View Website popup/session-cookie behavior. No live admin credentials were used.
+Validated with Node regression tests and Playwright browser emulation: automatic list-users request, rows rendered, error surfaced, and Retry recovered. Supabase DB/REST/Auth health returned ACTIVE_HEALTHY at check time. This patch is local only; push it and wait for Vercel production deployment before expecting it live.
