@@ -112,6 +112,7 @@ function location(res) { return res.headers.location; }
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/admin/dashboard');
   res = await request('/login', { cookie: admin });
   assert.equal(res.statusCode, 200); assert.match(res.body, /Username or email/);
+  assert.equal(res.headers['set-cookie'], undefined, 'Opening the customer login must not mutate the admin session');
   res = await request('/admin', { cookie: admin });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/admin/dashboard');
   res = await request('/admin/dashboard', { cookie: admin });
@@ -183,6 +184,9 @@ function location(res) { return res.headers.location; }
   assert.match(migration, /bp_profiles_username_lower_idx/);
   const adminLogin = (await request('/admin')).body;
   assert.match(adminLogin, /href="\/login">Return to user login/);
+  assert.match(adminLogin, /<style>\*\{box-sizing:border-box\}body/);
+  assert.match(ui, /@media\(max-width:720px\)\{\.bp-access\{order:-1;scroll-margin-top:68px\}\}/);
+  assert.match(dashboard, /href="\/login" target="_blank" rel="noopener noreferrer">View Website<\/a>/);
   assert.match(dashboard, /href="\/admin\/users"/);
   assert.match(portal, /\/api\/logout/);
   assert.match(portal, /create-user/);
