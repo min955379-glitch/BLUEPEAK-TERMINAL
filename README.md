@@ -22,7 +22,7 @@ The customer terminal excludes the legacy Admin panel and device-only sign-out c
 
 ## Institutional UI and user management
 
-The shared design uses the prompt's navy/ivory/gold token architecture, local Inter and JetBrains Mono, responsive layouts, visible gold focus, shimmering loading states, accessible confirmation dialogs, toast notifications, and `/` and `Ctrl/Cmd+K` search shortcuts. Positive/active states use gold or ivory; named green-family colors and green-hued UI color literals are prohibited in the named application sources.
+The shared design uses high-contrast navy/ivory/gold tokens, local Inter and JetBrains Mono, responsive layouts, visible focus, loading states, accessible confirmation dialogs, toast notifications, and `/` and `Ctrl/Cmd+K` search shortcuts. The current worktree now adds synchronized Dark and Light themes across customer terminal and admin pages, persistent `bp-theme` preference (dark by default), theme-aware chart rendering, readable form controls/dropdowns, and a theme switch on sign-in and admin views. Positive/active states use gold, navy, or ivory; green-family colors are prohibited in shipped UI sources. These latest contrast/theme updates are local and have not been uploaded or deployed.
 
 The customer/admin login forms retain their existing server-side auth flows. Admin actions require an authenticated administrator, AAL2 claim, approved admin profile, and active session; those checks are performed in both gateway and Edge Function.
 
@@ -36,7 +36,8 @@ The customer/admin login forms retain their existing server-side auth flows. Adm
 - Added `20261112160047_purge_legacy_soft_deleted_buyers.sql`; Supabase production migration history records it as applied. A preflight query found zero remaining legacy soft-deleted buyers, and post-migration counts remain zero.
 - `secure-bluepeak-admin` is ACTIVE, version 8, with the restricted `list-audit` operation and existing direct-delete protections.
 - The previously requested production test identity `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` remains absent: zero Auth users, profiles, and linked active sessions. Audit history remains.
-- Frontend and gateway files in this worktree are not yet uploaded by the repository owner. Vercel's latest production deployment is READY/PROMOTED for the prior GitHub commit `a33905cb60c18e78128bcf829e7d191bf05e4c93`; it does not include this worktree's institutional UI changes. No GitHub push was made. Authenticated production UI acceptance requires an AAL2 admin session and remains unverified.
+- The repository owner uploaded the prior source revision to GitHub. Vercel production deployment `dpl_AbXrMpuxXipHTCfSF8GPtf118EeL` is READY/PROMOTED for commit `d2fdc3b27b67b7a4710274b324bc44bf2dde27c1`. Unauthenticated production smoke checks passed for sign-in pages, public assets, protected-route redirects, and a 401 response from `/api/admin`.
+- The dual-theme/contrast revision described above is newer local work and is not included in that GitHub commit or Vercel deployment. Signed-in customer/admin production visual checks have not been performed.
 
 ## Local development and tests
 
@@ -56,12 +57,13 @@ node test-admin-user-management.js
 node test-pattern-scanner.js
 node test-asset-scanner.js
 node test-v1.js
+node test-theme-contrast.js
 ```
 
-Current worktree: all five suites, JavaScript syntax checks, JSON validation, and `git diff --check` pass. These local source-contract/mock tests do not create users in production and do not substitute for authenticated AAL2 acceptance.
+Current worktree: all six suites, JavaScript syntax checks, JSON validation, and `git diff --check` pass. The contrast test checks required token pairs, theme controls, dropdown/placeholder styling, and scans shipped CSS/HTML/JS for green-family colors. These local source-contract/mock checks do not create users in production and do not substitute for authenticated AAL2 acceptance.
 
 ## Release and archive
 
-The archive is `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`. It excludes `.env`, `.vercel`, and `node_modules`; verify its contents and tests before upload. The repository owner manually uploads the files to GitHub; this assistant does not push. Vercel will deploy the frontend/gateway after that upload. Supabase migration and Edge Function deployment are independent and are already complete for this update.
+The refreshed, verified archive `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` includes the current local UI revision and excludes `.env`, `.vercel`, and `node_modules`. The earlier source revision is on GitHub and Vercel is READY/PROMOTED for its commit; the theme/contrast changes in this archive are not uploaded or deployed. This assistant does not push. The Supabase cleanup migration is applied and `secure-bluepeak-admin` version 8 is active, but the stricter email-validation change in the current Edge Function source still needs deployment.
 
 Never place Supabase service-role credentials, user passwords, TOTP codes, environment files, or deployment credentials in source or the archive. Keep RLS enabled and never grant the browser direct access to profiles, sessions, or audit tables.

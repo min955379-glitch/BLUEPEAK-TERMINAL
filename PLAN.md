@@ -6,7 +6,7 @@ Keep the read-only market-analysis terminal and existing static HTML/CSS/vanilla
 
 ## Current implementation
 
-- Shared design tokens, local Inter/JetBrains Mono variable fonts, responsive terminal/admin pages, focus states, and gold/ivory positive states; zero green-family colors/names in the named app pages and scripts.
+- Shared high-contrast Dark/Light navy-ivory-gold tokens, local Inter/JetBrains Mono, persistent theme preference/toggles, theme-aware chart colors, and explicit control/select/option/placeholder styling; positive states remain non-green and are checked by `test-theme-contrast.js`.
 - Sign-in remains on the existing gateway-managed customer/admin auth endpoints; password controls preserve the existing MFA/AAL2 gates.
 - Admin dashboard now shows four user KPIs and links to the management workspace. User management includes add-user, strong password generation, credential copy, live requirement pills, search/filter counts, skeleton rows, toast feedback, destructive confirmations, and recent audit activity.
 - `bluepeak-ui.js` implements shared toasts, keyboard-trapped confirmation dialogs, password visibility controls, and `/`, Ctrl/Cmd+K, and Escape behaviors. Customer scanner access redirects on expired 401 sessions.
@@ -30,13 +30,15 @@ Passed in the current worktree:
 3. `node test-pattern-scanner.js`
 4. `node test-asset-scanner.js`
 5. `node test-v1.js`
-6. `node --check` for the modified JavaScript files, `python -m json.tool vercel.json`, and `git diff --check`.
+6. `node test-theme-contrast.js` — token contrast pairs, theme controls, form/dropdown styling, and green-family source audit.
+7. `node --check` for the modified JavaScript files, `python -m json.tool vercel.json`, and `git diff --check`.
 
 These tests are local mocks/source-contract checks, not an authenticated production UI test. No AAL2 admin session was used, and no replacement identity was created for the prior production purge test.
 
-## Remaining release steps
+## Deployment and remaining acceptance
 
-- Package the full project as `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`; exclude `.env`, `.vercel`, and `node_modules`; verify integrity, included tests, and credential patterns.
-- Repository owner manually uploads the archive contents to GitHub. Never push from this agent.
-- After GitHub upload, confirm Vercel production deployment is READY/PROMOTED. The current production deployment is READY/PROMOTED for prior commit `a33905cb60c18e78128bcf829e7d191bf05e4c93`; it does not contain this worktree's frontend/gateway upgrade.
-- With an authorized AAL2 admin session, test list/audit access and create/disable/enable/delete/recreate on disposable accounts; avoid the owner, last admin, and real customers.
+- The repository owner's prior source revision is on GitHub at commit `d2fdc3b27b67b7a4710274b324bc44bf2dde27c1`, and Vercel deployment `dpl_AbXrMpuxXipHTCfSF8GPtf118EeL` is READY/PROMOTED for it. The current dual-theme/contrast changes are newer local work and are not yet on GitHub or in that deployment; this agent does not push.
+- Unauthenticated production smoke checks: `/` and public design assets load; `/admin/users` and `/admin/dashboard` redirect to `/admin`; `/app` redirects to `/`; `POST /api/admin` returns 401.
+- The refreshed archive `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` includes this local theme update and is integrity-checked. The repository owner remains responsible for any GitHub upload; this agent does not push.
+- Supabase `secure-bluepeak-admin` is ACTIVE version 8; deploy the stricter email-validation change in the current source before considering the backend fully current.
+- With an authorized AAL2 admin session, privately test list/audit access and create/disable/enable/delete/recreate on disposable accounts. This has not been performed; avoid the owner, last admin, and real customers.

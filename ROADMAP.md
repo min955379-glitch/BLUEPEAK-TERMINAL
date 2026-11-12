@@ -3,7 +3,7 @@
 ## Current release: institutional UI and account-management upgrade
 
 ### Implemented in this worktree
-- Shared deep-navy, warm-ivory, muted-gold CSS token system; local Inter and JetBrains Mono; responsive semantic admin layouts; gold focus behavior; named/green-hued color ban in named UI sources.
+- Shared high-contrast dark/light navy-ivory-gold tokens; theme toggles and persistent dark-default preference across terminal/admin/sign-in; chart canvas reads active theme; form, select/option, placeholder, badges, and primary-button contrast improved. Local contrast audit confirms tested text pairs and zero green-family production color literals.
 - Customer/admin sign-in styling that preserves the existing server-side auth, reset, and MFA/AAL2 flows.
 - Customer terminal compatibility styling and scanner access/session-expiry handling; no legacy Admin panel or device-only sign-out controls are added.
 - Admin KPI strip, user provisioning/password generation and copy controls, live password requirements, user search/filter/counts, skeleton loading, stacked toasts, confirmation dialogs, keyboard navigation, and audit feed.
@@ -13,13 +13,14 @@
 ### Production backend status
 - Soft-deleted buyer cleanup migration `20261112160047_purge_legacy_soft_deleted_buyers` is applied. Zero legacy soft-deleted buyers remained at preflight; post-migration checks confirm zero.
 - `secure-bluepeak-admin` is ACTIVE version 8. Earlier requested account cleanup remains verified: no Auth/profile/linked app-session identity remains; audit history was preserved.
+- The stricter email-validation update exists in the current source but has not yet been deployed to Supabase.
 - Existing status and audit-FK migrations are applied. The linked production project is Supabase `ivpzznjunvxdfnpzggxp`.
 
-### Release gates still pending
-1. Complete and verify the ZIP archive named `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`.
-2. Repository owner manually uploads source to GitHub; this agent does not push.
-3. Wait for Vercel's frontend/gateway deployment after that upload. The institutional UI source in this worktree is not yet claimed as deployed to Vercel.
-4. The latest Vercel production deployment is READY/PROMOTED for the prior commit `a33905cb60c18e78128bcf829e7d191bf05e4c93`; wait for a new deployment after the owner uploads this worktree. Privately verify authenticated admin workflows with a real AAL2 session and disposable test users. This has not been performed; do not test with owner, last-admin, or actual customer accounts.
+### Deployment and remaining acceptance
+- The previously uploaded source is on GitHub at commit `d2fdc3b27b67b7a4710274b324bc44bf2dde27c1`; Vercel deployment `dpl_AbXrMpuxXipHTCfSF8GPtf118EeL` is READY/PROMOTED for it. The latest dual-theme/contrast changes are local only and have not been uploaded or deployed.
+- The refreshed `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` archive includes the local changes and is integrity-checked; regression and contrast suites pass.
+- Public production smoke checks pass; protected routes remain gated and unauthenticated `POST /api/admin` returns 401.
+- Signed-in customer/admin production visual verification in both themes and authenticated admin workflows are unverified. No supplied customer credential was used. After owner upload/deployment, privately test with authorized accounts; use disposable identities for destructive admin acceptance and avoid the owner, last-admin, and real customers.
 
 ## Ongoing platform maintenance
 - Keep vanilla HTML/CSS/JS and the Node gateway/Supabase architecture; do not convert to a framework or add an external CSS framework.

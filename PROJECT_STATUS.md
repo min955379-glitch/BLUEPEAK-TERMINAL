@@ -4,7 +4,8 @@
 Upgrade the institutional UI and backend workflows while preserving the native HTML/CSS/vanilla-JS, Node gateway, Supabase Auth/MFA/AAL2, RLS, and Edge Function architecture. Keep username/email reuse immediate after deletion, enforce protection server-side, do not expose secrets, and do not push to GitHub. Deliver a verified ZIP and distinguish authenticated production verification from source-level tests.
 
 ## Implemented in the current worktree
-- Added `bluepeak-design-system.css` with navy/ivory/gold tokens, shared responsive components, local font faces, table/card/KPI/skeleton/toast/dialog styles, and terminal class mappings.
+- Added `bluepeak-design-system.css` with high-contrast dual-theme navy/ivory/gold tokens, shared responsive components, local font faces, table/card/KPI/skeleton/toast/dialog styles, explicit form/select/option/placeholder rules, and terminal class mappings.
+- Added persisted dark-default/light mode toggles for customer terminal, sign-in screens, and admin pages. Theme changes update root tokens and chart rendering; chart canvas/grid/axes/bullish/bearish colors follow the active theme.
 - Added `bluepeak-ui.js` with stacked accessible notifications, native confirmation dialogs with focus containment, password visibility toggles, and keyboard shortcuts.
 - Restored and styled the existing customer terminal in `index.html`; wired the shared CSS and helper assets through public gateway routes while keeping the terminal route itself protected.
 - Restyled `admin-dashboard.html` and `admin-users.html`; added KPI cards, provisioning password generation/copy/requirements, search/filter/counts, loading skeletons, and audit display.
@@ -27,6 +28,7 @@ All pass in this worktree:
 - `node test-pattern-scanner.js`
 - `node test-asset-scanner.js`
 - `node test-v1.js`
+- `node test-theme-contrast.js` — required token pairs, ≥AA text / ≥AAA primary pairs, theme toggles, form controls, dropdowns, and zero green-family shipped source colors.
 - `node --check api/gateway.js`, `bluepeak-ui.js`, `admin-portal.js`, `pattern-scanner.js`, `scan-watched-assets.js`, and `bluepeak-access-ui.js`
 - `python3 -m json.tool vercel.json`
 - `git diff --check`
@@ -34,6 +36,8 @@ All pass in this worktree:
 The suites are local source-contract/mocked tests. They are not evidence of authenticated production use.
 
 ## Deployment and next steps
-- The frontend/gateway source has not been pushed (repository owner uploads manually). Vercel's latest production deployment is READY/PROMOTED for prior commit `a33905cb60c18e78128bcf829e7d191bf05e4c93`; it does not include this worktree's upgrade.
-- Complete and validate `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`, excluding `.env`, `.vercel`, and `node_modules`.
-- After the repository owner uploads the files, verify Vercel is READY/PROMOTED. Then run authorized AAL2 UI acceptance on disposable identities; no deletion of the owner, last admin, or real customer.
+- The prior source revision was uploaded by the repository owner at GitHub commit `d2fdc3b27b67b7a4710274b324bc44bf2dde27c1`; Vercel production is READY/PROMOTED for that commit. The new dual-theme/contrast revision is local-only and not included in the uploaded commit/deployment. This agent does not push.
+- Vercel production deployment `dpl_AbXrMpuxXipHTCfSF8GPtf118EeL` is READY/PROMOTED for that commit, with `bluepeak-terminal.vercel.app` assigned.
+- Public production smoke checks passed: home/sign-in and shared CSS, helper JS, and local fonts return HTTP 200; protected admin routes redirect to `/admin`; `/app` redirects to `/`; unauthenticated `POST /api/admin` returns HTTP 401.
+- The refreshed archive `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` includes the current local theme work and is available at `/home/user/BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`.
+- Still pending: upload/deploy this local UI revision; deploy the stricter email-validation source for `secure-bluepeak-admin` to Supabase (production remains ACTIVE version 8); and verify customer/admin views in both themes plus authorized AAL2 admin workflows. No supplied customer credential or authenticated production session was used. Use disposable identities for destructive acceptance; avoid the owner, last admin, and real customers.
