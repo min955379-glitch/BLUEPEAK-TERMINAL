@@ -3,8 +3,10 @@ import {
   disableProfilePatch,
   enableProfilePatch,
   hasExactConfirmation,
+  isProtectedOwnerIdentity,
+  isSoftDeletedBuyer,
+  isUserListed,
   isProfileEnabled,
-  softDeleteProfilePatch,
   targetProtectionError,
 } from './user-management-rules.mjs';
 
@@ -25,6 +27,8 @@ const emailOk = (value: string) => value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\
 const identifierOk = (value: string) => value === value.trim() && (nameOk(value) || emailOk(value));
 const strong = (value: string) => value.length >= 12 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
 const emailFor = (username: string) => `${username.toLowerCase()}@users.bluepeak.invalid`;
+const OWNER_EMAIL = 'min955379@gmail.com';
+const isOwnerIdentity = (username: string, email: string) => username.toLowerCase() === 'owner' || email.toLowerCase() === OWNER_EMAIL;
 
 function claims(token: string) {
   try {
@@ -39,7 +43,7 @@ async function audit(adminId: string, action: string, targetId: string | null, d
     admin_user_id: adminId,
     action,
     target_user_id: targetId,
-    details,
+    details: { ...details, actor_user_id_snapshot: adminId },
   });
   return error?.message || null;
 }
@@ -106,9 +110,10 @@ Deno.serve(async request => {
   if (action === 'list-users') {
     const { data, error } = await db.from('bp_profiles')
       .select('user_id,username,email,role,access_status,created_at,approved_at,revoked_at,deleted_at,deleted_by,deleted_reason')
+      .neq('access_status', 'deleted').is('deleted_at', null)
       .order('created_at', { ascending: false });
     if (error) return bad('Could not load user accounts.', 500);
-    return out({ users: data || [], can_purge_deleted_users: actorProfile.username === 'owner' });
+    return out({ users: (data || []).filter(isUserListed) });
   }
 
   if (action === 'create-user') {
@@ -119,12 +124,27 @@ Deno.serve(async request => {
     }
     if (!strong(password)) return bad('Use at least 12 characters with uppercase, lowercase, and a number.');
 
-    const { data: existing, error: existingError } = await db.from('bp_profiles')
-      .select('user_id').eq('username', username).limit(1);
-    if (existingError) return bad('Could not check whether the username is already in use.', 500);
-    if (existing?.length) return bad('That username or email is already in use.', 409);
+    const email = emailOk(username) ? username.toLowerCase() : emailFor(username);
+    if (isOwnerIdentity(username, email)) return bad('The designated owner identity is protected.', 403);
 
-    const email = emailOk(username) ? username : emailFor(username);
+    // A legacy soft-deleted profile should not reserve its old username/email forever.
+    // Purge only matching soft-deleted customer identities; active or protected records remain conflicts.
+    const [byUsername, byEmail] = await Promise.all([
+      db.from('bp_profiles').select('user_id,username,email,role,access_status,deleted_at').eq('username', username),
+      db.from('bp_profiles').select('user_id,username,email,role,access_status,deleted_at').eq('email', email),
+    ]);
+    if (byUsername.error || byEmail.error) return bad('Could not check whether the username or email is already in use.', 500);
+    const matches = new Map<string, NonNullable<typeof byUsername.data>[number]>();
+    for (const profile of [...(byUsername.data || []), ...(byEmail.data || [])]) matches.set(profile.user_id, profile);
+    for (const profile of matches.values()) {
+      if (isProtectedOwnerIdentity(profile)) return bad('The designated owner identity is protected.', 403);
+      if (!isSoftDeletedBuyer(profile)) return bad('That username or email is already in use.', 409);
+      const { error: purgeError } = await db.auth.admin.deleteUser(profile.user_id);
+      if (purgeError) return bad(`Could not release the matching soft-deleted account: ${purgeError.message}`, 500);
+      const { data: stale, error: verifyError } = await db.from('bp_profiles').select('user_id').eq('user_id', profile.user_id).maybeSingle();
+      if (verifyError || stale) return bad('The old deleted profile could not be fully removed; no replacement was created.', 500);
+    }
+
     const { data: created, error: createError } = await db.auth.admin.createUser({
       email,
       password,
@@ -218,47 +238,31 @@ Deno.serve(async request => {
     if (!hasExactConfirmation(`DELETE ${target.username}`, body.confirmation)) {
       return bad(`Confirmation must exactly match: DELETE ${target.username}`, 400);
     }
-    const now = new Date().toISOString();
-    const { data: updated, error } = await db.from('bp_profiles')
-      .update(softDeleteProfilePatch(actor.user_id, now))
-      .eq('user_id', target.user_id).eq('role', 'buyer').neq('access_status', 'deleted')
-      .select('user_id').maybeSingle();
-    if (error) return bad('Could not soft-delete the user account.', 500);
-    if (!updated) return bad('The account status changed; reload the user list and try again.', 409);
 
-    const sessionWarning = await revokeSessions(target.user_id, now, 'account_soft_deleted');
-    const { error: banError } = await db.auth.admin.updateUserById(target.user_id, { ban_duration: '876000h' });
-    const auditWarning = await audit(actor.user_id, 'soft_delete_user', target.user_id, {
+    const now = new Date().toISOString();
+    // Explicitly remove app sessions first; Auth deletion also cascades any remaining sessions.
+    const { error: sessionError } = await db.from('bp_active_sessions').delete().eq('user_id', target.user_id);
+    if (sessionError) return bad('Could not clear the user sessions; account was not deleted.', 500);
+
+    // Auth deletion cascades bp_profiles and session rows; nullable historical FK references are retained as NULL.
+    const { error: deleteError } = await db.auth.admin.deleteUser(target.user_id);
+    if (deleteError) return bad(`Permanent deletion failed: ${deleteError.message}`, 500);
+
+    // Keep an immutable audit snapshot without retaining a live FK to the removed user.
+    const auditWarning = await audit(actor.user_id, 'delete_user', null, {
       username: target.username,
       email: target.email,
+      deleted_user_id: target.user_id,
       deleted_at: now,
     });
-    return out({ ok: true, username: target.username, access_status: 'deleted',
-      message: 'Account soft-deleted; profile and related data are retained.',
-      ...warningResult([
-        sessionWarning,
-        banError ? `Application access is blocked, but the Auth-level block needs attention: ${banError.message}` : null,
-        auditWarning ? `Deletion succeeded, but the audit record needs attention: ${auditWarning}` : null,
-      ]) });
-  }
-
-  if (action === 'purge-deleted-user') {
-    if (actor.username !== 'owner') return bad('Only the designated owner can permanently purge a deleted account.', 403);
-    if (target.access_status !== 'deleted' || !target.deleted_at) return bad('Only soft-deleted accounts can be permanently purged.', 409);
-    if (!hasExactConfirmation(`PURGE ${target.username}`, body.confirmation)) {
-      return bad(`Confirmation must exactly match: PURGE ${target.username}`, 400);
+    const { data: remainingProfile, error: verifyError } = await db.from('bp_profiles')
+      .select('user_id').eq('user_id', target.user_id).maybeSingle();
+    if (verifyError || remainingProfile) {
+      return bad('The Auth account was deleted, but its profile cleanup needs administrator attention.', 500);
     }
-    const { error } = await db.auth.admin.deleteUser(target.user_id);
-    if (error) return bad(`Permanent deletion failed without removing the profile: ${error.message}`, 500);
-
-    // Existing FK rules cascade profile/session rows and set historical user references to NULL.
-    const auditWarning = await audit(actor.user_id, 'purge_deleted_user', null, {
-      username: target.username,
-      email: target.email,
-      purged_user_id: target.user_id,
-    });
-    return out({ ok: true, username: target.username, access_status: 'purged',
-      ...warningResult([auditWarning ? `Permanent deletion succeeded, but the audit record needs attention: ${auditWarning}` : null]) });
+    return out({ ok: true, username: target.username, access_status: 'deleted',
+      message: 'Account permanently deleted. Its username and email are available for reuse.',
+      ...warningResult([auditWarning ? `Deletion succeeded, but the audit record needs attention: ${auditWarning}` : null]) });
   }
 
   if (action === 'reset-user-password') {

@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const rules = import('./supabase/functions/secure-bluepeak-admin/user-management-rules.mjs');
 
 (async () => {
-  const { disableProfilePatch, enableProfilePatch, softDeleteProfilePatch, isProfileEnabled,
-    targetProtectionError, hasExactConfirmation } = await rules;
+  const { disableProfilePatch, enableProfilePatch, isProfileEnabled, isUserListed, isSoftDeletedBuyer,
+    isProtectedOwnerIdentity, targetProtectionError, hasExactConfirmation } = await rules;
   const timestamp = '2026-11-12T12:00:00.000Z';
   const actor = { user_id: 'admin-id', username: 'owner' };
   const original = {
@@ -31,18 +31,29 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
   assert.equal(enabled.user_id, original.user_id);
   assert.equal(enabled.custom_profile_data, original.custom_profile_data);
 
-  // Soft deletion blocks access while retaining the auth/profile identity and related data.
-  const deleted = { ...enabled, ...softDeleteProfilePatch(actor.user_id, timestamp) };
-  assert.equal(deleted.access_status, 'deleted');
-  assert.equal(deleted.deleted_by, actor.user_id);
-  assert.equal(deleted.deleted_at, timestamp);
-  assert.equal(isProfileEnabled(deleted), false);
-  assert.equal(deleted.user_id, original.user_id);
-  assert.equal(deleted.custom_profile_data, original.custom_profile_data);
+  // Direct delete removes the row from returned-user policy, while legacy soft-deleted buyer rows are purgeable for reuse.
+  const legacyDeleted = { ...original, access_status: 'deleted', deleted_at: timestamp };
+  assert.equal(isUserListed(legacyDeleted), false);
+  assert.equal(isUserListed(original), true);
+  assert.equal(isSoftDeletedBuyer(legacyDeleted), true);
+  assert.equal(isSoftDeletedBuyer({ ...legacyDeleted, role: 'admin' }), false);
+  const remainingRows = [original, legacyDeleted].filter(isUserListed);
+  assert.deepEqual(remainingRows.map(row => row.username), ['buyer-one']);
+  const afterDirectDelete = [original, legacyDeleted].filter(row => row.user_id !== original.user_id && isUserListed(row));
+  assert.equal(afterDirectDelete.some(row => row.username === original.username || row.email === original.email), false);
+  const legacyMatches = [legacyDeleted];
+  const mockAuthEmails = new Set([legacyDeleted.email.toLowerCase()]);
+  for (const row of legacyMatches.filter(isSoftDeletedBuyer)) mockAuthEmails.delete(row.email.toLowerCase());
+  assert.equal(mockAuthEmails.has('buyer@example.invalid'), false, 'legacy Auth email is released before replacement creation');
+  mockAuthEmails.add('buyer@example.invalid');
+  assert.equal(mockAuthEmails.has('buyer@example.invalid'), true, 'replacement can claim the released email');
+  assert.equal(isProtectedOwnerIdentity({ username: 'owner', email: 'owner@users.invalid' }), true);
+  assert.equal(isProtectedOwnerIdentity({ username: 'some-name', email: 'MIN955379@GMAIL.COM' }), true);
 
   // Explicit protections: self, designated owner, all administrator roles, and last-admin guard.
   assert.match(targetProtectionError({ ...original, user_id: actor.user_id }, actor), /own account/);
   assert.match(targetProtectionError({ ...original, username: 'owner' }, actor), /owner account/);
+  assert.match(targetProtectionError({ ...original, username: 'owner-copy', email: 'min955379@gmail.com' }, actor), /owner account/);
   assert.match(targetProtectionError({ ...original, role: 'admin' }, actor, 1), /last active administrator/);
   assert.match(targetProtectionError({ ...original, role: 'admin', username: 'other-admin' }, actor, 2), /Administrator accounts/);
   assert.equal(targetProtectionError(original, actor, 1), null);
@@ -55,9 +66,11 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
   const authSource = fs.readFileSync('./supabase/functions/secure-bluepeak-auth/index.ts', 'utf8');
   const accessSource = fs.readFileSync('./supabase/functions/bluepeak-access/index.ts', 'utf8');
   const migration = fs.readFileSync('./supabase/migrations/20261112150000_add_safe_user_management_status.sql', 'utf8');
+  const auditMigration = fs.readFileSync('./supabase/migrations/20261112152724_detach_admin_audit_actor_on_auth_delete.sql', 'utf8');
   const baseSchema = fs.readFileSync('./supabase/migrations/20261112063225_create_bluepeak_access_tables.sql', 'utf8');
   const gateway = fs.readFileSync('./api/gateway.js', 'utf8');
   const ui = fs.readFileSync('./admin-portal.js', 'utf8');
+  const usersHtml = fs.readFileSync('./admin-users.html', 'utf8');
 
   assert.match(functionSource, /tokenClaims\.aal !== 'aal2'/);
   assert.match(functionSource, /actorProfile\.role !== 'admin'/);
@@ -65,36 +78,61 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
   assert.match(functionSource, /disable-user/);
   assert.match(functionSource, /enable-user/);
   assert.match(functionSource, /delete-user/);
-  assert.match(functionSource, /purge-deleted-user/);
+  assert.doesNotMatch(functionSource, /purge-deleted-user/);
   assert.match(functionSource, /ban_duration: '876000h'/);
   assert.match(functionSource, /ban_duration: 'none'/);
   assert.match(functionSource, /revokeSessions\(target\.user_id/);
   assert.match(functionSource, /isProfileEnabled\(target\)/);
   assert.match(functionSource, /enableableStatus = target\.access_status === 'revoked' \|\| target\.access_status === 'pending'/);
-  assert.match(functionSource, /actor\.username !== 'owner'/);
   assert.match(functionSource, /targetProtectionError\(target, actor, activeAdminCount\)/);
   assert.match(functionSource, /hasExactConfirmation\(`DELETE/);
-  assert.match(functionSource, /hasExactConfirmation\(`PURGE/);
   assert.match(functionSource, /db\.auth\.admin\.deleteUser\(target\.user_id\)/);
   const enableStart = functionSource.indexOf("if (action === 'enable-user')");
   const deleteStart = functionSource.indexOf("if (action === 'delete-user')", enableStart);
   const enableBlock = functionSource.slice(enableStart, deleteStart);
   assert.ok(enableBlock.indexOf('revokeSessions(') < enableBlock.indexOf("ban_duration: 'none'"), 'old sessions must be revoked before enabling the account');
   assert.ok(enableBlock.indexOf("ban_duration: 'none'") < enableBlock.indexOf('enableProfilePatch('), 'Auth is unbanned before profile activation');
-  assert.match(functionSource, /can_purge_deleted_users/);
+  assert.match(functionSource, /isUserListed/);
+  assert.match(functionSource, /isSoftDeletedBuyer/);
+  assert.match(functionSource, /db\.auth\.admin\.deleteUser\(target\.user_id\)/);
+  assert.match(functionSource, /message: 'Account permanently deleted\. Its username and email are available for reuse\.'/);
+  assert.match(functionSource, /db\.from\('bp_active_sessions'\)\.delete\(\)\.eq\('user_id', target\.user_id\)/);
+  assert.match(functionSource, /deleted_user_id: target\.user_id/);
+  assert.match(functionSource, /const email = emailOk\(username\) \? username\.toLowerCase\(\) : emailFor\(username\)/);
+  assert.match(functionSource, /const \[byUsername, byEmail\]/);
+  assert.match(functionSource, /db\.auth\.admin\.deleteUser\(profile\.user_id\)/);
+  const createStart = functionSource.indexOf("if (action === 'create-user')");
+  const legacyPurge = functionSource.indexOf('db.auth.admin.deleteUser(profile.user_id)', createStart);
+  const createAuth = functionSource.indexOf('db.auth.admin.createUser({', createStart);
+  assert.ok(legacyPurge >= 0 && createAuth > legacyPurge, 'matching soft-deleted Auth identity must be purged before createUser retries the same email');
+  const deleteBlock = functionSource.slice(functionSource.indexOf("if (action === 'delete-user')"), functionSource.indexOf("if (action === 'reset-user-password')"));
+  assert.ok(deleteBlock.indexOf(".delete().eq('user_id', target.user_id)") < deleteBlock.indexOf('db.auth.admin.deleteUser(target.user_id)'), 'tracked app sessions are cleared before Auth deletion');
+  assert.ok(deleteBlock.indexOf('db.auth.admin.deleteUser(target.user_id)') < deleteBlock.indexOf("audit(actor.user_id, 'delete_user', null"), 'audit snapshot is inserted after target deletion with a null target FK');
+
   assert.match(authSource, /p\.access_status!=='approved'\|\|p\.revoked_at/);
   assert.match(accessSource, /p\.access_status==='approved'/);
   assert.match(migration, /'revoked', 'deleted'/);
   assert.match(migration, /deleted_by uuid REFERENCES auth\.users\(id\) ON DELETE SET NULL/);
+  assert.match(auditMigration, /admin_user_id DROP NOT NULL/);
+  assert.match(auditMigration, /FOREIGN KEY \(admin_user_id\)[\s\S]*?ON DELETE SET NULL/);
+  assert.match(auditMigration, /actor_user_id_snapshot/);
+  assert.match(auditMigration, /actor_username/);
+  assert.match(functionSource, /actor_user_id_snapshot: adminId/);
   assert.match(baseSchema, /bp_profiles \([\s\S]*?user_id uuid primary key references auth\.users\(id\) on delete cascade/);
   assert.match(baseSchema, /bp_active_sessions \([\s\S]*?user_id uuid not null references auth\.users\(id\) on delete cascade/);
   assert.match(baseSchema, /user_id uuid references auth\.users\(id\) on delete set null/);
-  assert.match(gateway, /'disable-user','enable-user','delete-user','purge-deleted-user'/);
+  assert.match(gateway, /'disable-user','enable-user','delete-user'/);
+  assert.doesNotMatch(gateway, /purge-deleted-user/);
   assert.match(ui, /Delete User/);
   assert.match(ui, /Enable access/);
   assert.match(ui, /Disable access/);
-  assert.match(ui, /Permanently purge/);
+  assert.doesNotMatch(ui, /Permanently purge|purge-deleted-user/);
+  assert.match(ui, /Permanently delete this account/);
+  assert.match(ui, /row\.remove\(\)/);
+  assert.match(ui, /users\.filter\(user => user\.access_status !== 'deleted' && !user\.deleted_at\)/);
   assert.match(ui, /emailCell\.textContent = user\.email/);
+  assert.match(usersHtml, /Delete User permanently removes the account after confirmation/);
+  assert.doesNotMatch(usersHtml, /recoverable soft delete|Permanently purge|action\.purge/);
 
-  console.log('PASS test-admin-user-management: disable/enable/delete/purge transitions, preserved data, confirmation checks, owner/self/last-admin protections, Auth bans, session revocation, login/API status guards, FK retention, and UI actions.');
+  console.log('PASS test-admin-user-management: disable/enable safeguards, immediate hard delete, FK/session cleanup, hidden deleted rows, soft-deleted collision cleanup/reuse, owner/self/last-admin protections, confirmation, MFA/AAL2, and UI/gateway contracts.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

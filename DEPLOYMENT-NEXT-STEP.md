@@ -2,41 +2,34 @@
 
 ## Current source/deployment status
 
-The repository base for the new user-management archive is remote `main` commit `2f6cdd5`. The new enable/disable/soft-delete/owner-purge files are prepared for manual upload; this agent will not push. Existing Vercel production and Supabase `secure-bluepeak-admin` do not yet include these new actions. The schema migration below is pending and was not applied during this work.
+The source package is based on user-pushed `main` commit `6bc0efe8f49c22f3ab3408b11db523d1b8e947f2`. The repository owner will manually upload the new ZIP contents; this assistant will not push. The prior Vercel deployment remains active until that upload triggers a new build. Supabase `secure-bluepeak-admin` is ACTIVE version 5 with direct-delete/reuse behavior.
 
 ## 1. Upload the source
 
-Extract `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` and upload its repository-root contents to the existing GitHub repository, preserving file paths. Do not upload `.git`, `.env`, service-role secrets, passwords, access tokens, or local deployment metadata. Verify the intended `main` commit contains the files before continuing.
+Extract `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` and upload repository-root contents to the existing GitHub repository, preserving paths. Do not upload `.git`, `.env`, service-role secrets, passwords, access tokens, or local deployment metadata.
 
-## 2. Apply the additive Supabase migration
+## 2. Database status
 
-Against the existing project only, first inspect migration history. Then apply:
+Both required migrations are applied in the linked production project:
+- `20261112150559_add_safe_user_management_status`
+- `20261112152724_detach_admin_audit_actor_on_auth_delete`
 
-`supabase/migrations/20261112150000_add_safe_user_management_status.sql`
+The latter snapshots existing audit actor IDs/names/emails, allows the actor FK to become NULL on Auth deletion, and prevents historical audit actor references from blocking account deletion. Auth deletion cascades profile/application/Auth sessions and nullable historic target references are detached. For a separate environment, check migration history and apply the included SQL before deploying the Edge Function.
 
-This migration adds soft-delete metadata and allows the `deleted` profile status; it does not delete current user data or alter RLS. Do not run `supabase db push` against an unverified project.
+## 3. Supabase function status
 
-## 3. Deploy the Supabase admin function
-
-The updated Edge Function imports a local helper file; deploy from the repository with Supabase CLI so both files are bundled:
+The updated function is already deployed to project `ivpzznjunvxdfnpzggxp` as ACTIVE version 5. If future code changes require redeployment, deploy the function with its colocated helper:
 
 ```sh
 supabase link --project-ref ivpzznjunvxdfnpzggxp
 supabase migration list
-supabase db push
 supabase functions deploy secure-bluepeak-admin
 ```
 
-Confirm the existing `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` Supabase function secrets are still configured. Never paste service-role values into GitHub, Vercel client code, or chat.
+Keep `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` only in their appropriate server-side Supabase/Vercel configuration. Never include actual secret values in GitHub, browser code, or this ZIP.
 
-## 4. Wait for Vercel
+## 4. Wait for Vercel and privately verify
 
-Wait until the Git-linked Vercel production deployment for the uploaded commit is READY/PROMOTED. Verify `/admin`, `/admin/dashboard`, and `/admin/users` before using account controls.
+Wait until the deployment for the manual upload is READY/PROMOTED. Then use an authorized AAL2 administrator and disposable buyer to verify disable/enable, direct deletion, immediate table removal, and recreation with the same username/email. Check API denial, audit records, owner/self/last-admin protection, mobile/desktop layout, and scanner regressions. Do not share credentials/TOTP codes or test deletion against the owner/last admin/real customers.
 
-## 5. Private acceptance checks
-
-Use an authorized AAL2 admin and disposable buyer account. Verify disable, denied login/API/existing session, enable with existing password and preserved profile data, soft delete and Disabled/Deleted statuses, owner-only purge, FK cleanup, audit records, customer-denial of admin APIs, and owner/self/last-admin protection. Check mobile/desktop layout and customer scanner afterwards. Do not share credentials or TOTP codes in chat.
-
-## Secrets
-
-The Vercel gateway uses `SUPABASE_ANON_KEY` server-side. Supabase `SERVICE_ROLE_KEY` remains only in Edge Function secrets. No secret values belong in the archive.
+The previously soft-deleted test identity `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` has already been purged from production under the user's explicit request. Verification found no remaining Auth row, profile, or application session; its identifier is available. No replacement account was created.

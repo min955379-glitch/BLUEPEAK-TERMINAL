@@ -1,6 +1,6 @@
 # BluePeak scanner and access-control implementation notes
 
-> The following scanner/security notes are retained as a detailed design snapshot. For the current deployment and release state, use `PROJECT_STATUS.md`. The current Admin Users update adds server-enforced disable/enable, soft delete, and owner-only permanent purge; it is not part of the previously deployed baseline until the archive's migration and Edge Function are released.
+> The following scanner/security notes are retained as a detailed design snapshot. For the current deployment and release state, use `PROJECT_STATUS.md`. The current Admin Users update adds server-enforced disable/enable and one-step confirmed permanent deletion with immediate identifier reuse. The current release and deployment status are in PROJECT_STATUS.md; this file remains a historical design snapshot.
 
 Scanner logic is implemented in the source package.
 

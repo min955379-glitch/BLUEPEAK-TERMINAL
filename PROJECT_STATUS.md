@@ -1,62 +1,43 @@
 # BluePeak Terminal — Project Status
 
-## Current work
-Implement a complete, server-enforced customer user-management workflow in the existing MFA-protected Admin Portal. The source package is based on remote `main` commit `2f6cdd5`. The changes are prepared locally for the repository owner to upload; this agent will not push to GitHub.
+## Current request
+Implement direct Delete User behavior with immediate username/email reuse, remove deleted rows from the Admin Users table, keep owner/self/last-active-admin safeguards, preserve Disable/Enable, update the project docs, deploy the Edge Function, clean up the specifically named old test account, and deliver a complete ZIP. The repository owner uploads the ZIP to GitHub; the assistant does not push.
 
-## Feature behavior
-- **Disable Access:** only buyer accounts are targets. The server updates the profile to `revoked`, revokes all unrevoked `bp_active_sessions`, applies a long Supabase Auth ban, and writes an audit event. Existing protected routes/APIs independently re-check profile status and active session.
-- **Enable Access:** only `revoked` buyers can be enabled. The Auth ban is removed; profile changes to `approved`, approval actor/time are refreshed, and revoke metadata is cleared. Existing sessions remain revoked; login with the current password creates a new session. No profile/customer records are deleted.
-- **Delete User:** an explicit two-step confirmation soft-deletes a buyer (`access_status='deleted'`) and records deleted time, actor, and reason. It blocks login and protected access, revokes app sessions, applies an Auth ban, and retains the Auth/profile identity, related records, and audit history.
-- **Permanent purge:** soft-deleted buyer only, designated profile `username='owner'` only, and separately protected by Auth user verification, AAL2, active admin session, and typed `PURGE <username>` confirmation. Supabase Auth deletion cascades profile and application session rows; configured historical references use `SET NULL`. This operation cannot be undone.
-- Admin and owner profiles are never customer-management targets. Self, designated owner, and last-active-admin protections are checked server-side even if frontend controls are bypassed.
-- User table shows username/name, email, role, Active/Disabled/Deleted/Pending status, registration date, and only relevant actions. The screen uses responsive contained table scrolling and status pills.
+## Implemented source changes
+- **Delete User:** after one explicit confirmation that names the username/email and explains irreversibility, the server deletes the customer's Supabase Auth identity. Verified Auth FKs cascade-delete `bp_profiles`, `bp_active_sessions`, and Auth sessions; nullable historical references are detached. The audit snapshot stores username/email as details with a null target reference.
+- **Immediate reuse:** when creating a user, the function checks both username and normalized email. A matching soft-deleted buyer identity is permanently cleaned up (Auth deletion cascades to its profile/sessions), cleanup is verified, then creation continues. Active records and owner/admin identities remain conflicts.
+- **Admin table:** server and browser filters omit deleted profiles. The row is removed immediately after a successful response; there is no Deleted status row or Permanently purge button/action.
+- **Security:** AAL2/MFA, approved admin role, active administrator session, server-side user checks, exact DELETE confirmation, owner username/email protection, self-protection, and admin/last-admin protections are retained. Disable/Enable behavior is unchanged.
+- **Database:** `20261112152724_detach_admin_audit_actor_on_auth_delete.sql` is applied. It snapshots existing audit actors and makes the audit-actor FK nullable with `ON DELETE SET NULL`; the earlier status migration is also applied. Profile/session cascades and nullable historical references were verified.
 
-## Database inspection and migration
-The linked Supabase project was inspected through its catalog. `bp_profiles.access_status` previously allowed `pending`, `approved`, and `revoked`; profile/session FKs cascade on Auth deletion; login-event and audit target references are nullable/set-null; RLS was enabled and no public table policies were returned. This change keeps the current RLS/privileges unchanged.
+## Production actions and deployment
+- Updated `secure-bluepeak-admin` is **ACTIVE version 5** in Supabase project `ivpzznjunvxdfnpzggxp`.
+- Anonymous POST probe to the function returned **401 — Admin authentication required**. No authenticated admin session was available; no authenticated feature action was exercised.
+- The named production soft-deleted test account `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` was verified as a buyer soft-deleted profile, then removed with a guarded exact-ID/email/username/status SQL delete. Post-delete queries confirmed **0 Auth users, 0 profiles, and 0 application sessions** for that identity. The username/email are free. No replacement account was created.
+- A database audit row (ID 14) records this one-off user-requested maintenance cleanup, its timestamp, target snapshot, and that it ran through the Supabase SQL connector rather than an authenticated app-admin session. Future UI deletions use the deployed AAL2 server handler and actor snapshot.
+- The Vercel site is still on the prior user-pushed commit until the repository owner uploads these files and Vercel deploys them. This assistant made no GitHub push.
 
-New migration: `supabase/migrations/20261112150000_add_safe_user_management_status.sql`. It adds `deleted_at`, `deleted_by`, and `deleted_reason`, permits the `deleted` status, and enforces a deleted-timestamp consistency check. It is additive and does not alter existing rows or delete user data. **It has not been applied to Supabase.** Apply after checking migration history.
-
-## Files changed/added
-Modified:
-- `admin-dashboard.html`
-- `admin-users.html`
-- `admin-portal.js`
-- `api/gateway.js`
+## Files updated for this request
+- `admin-users.html`, `admin-portal.js`, `api/gateway.js`
 - `supabase/functions/secure-bluepeak-admin/index.ts`
-- `test-gateway-auth.js`
-- `README.md`, `PLAN.md`, `ROADMAP.md`, `PROJECT_STATUS.md`
-
-Added:
 - `supabase/functions/secure-bluepeak-admin/user-management-rules.mjs`
-- `supabase/migrations/20261112150000_add_safe_user_management_status.sql`
-- `test-admin-user-management.js`
+- `test-admin-user-management.js`, `test-gateway-auth.js`
+- `README.md`, `PLAN.md`, `ROADMAP.md`, `PROJECT_STATUS.md`
+- Supporting source/deployment/upload documentation and inventory
 
-## Tests run
-Passed locally on source based on `2f6cdd5`:
-- `node test-gateway-auth.js`
+The archive includes both schema migrations. Production history records the status migration as `20261112150559_add_safe_user_management_status` and the new audit-actor migration as `20261112152724_detach_admin_audit_actor_on_auth_delete`.
+
+## Tests run locally
 - `node test-admin-user-management.js`
+- `node test-gateway-auth.js`
 - `node test-pattern-scanner.js`
 - `node test-asset-scanner.js`
 - `node test-v1.js`
-- Node syntax checks for gateway, admin UI, and test files; `git diff --check`.
-- Playwright browser emulation at 390px with mocked account/API data: disable → enable → soft delete → owner purge; admin account controls protected; table stayed within viewport. User API responses were mocked.
+- Node syntax checks for gateway, admin UI, and test files
+- esbuild Edge Function bundle and `node --check` on generated bundle
+- `git diff --check`
 
-The state/authorization checks are unit/source-contract tests and mocked browser flows—not a real authenticated Supabase integration test. No real customer account was changed, no admin password/TOTP was accessed, and no destructive production operation was executed. Deno/Supabase Edge Function runtime and the new migration have not yet been run against production.
+All passed. Policy/source-contract tests include direct deletion, list filtering, soft-deleted collision cleanup, same-identifier reuse policy, session/FK semantics, MFA/AAL2, and owner/self/last-admin restrictions. They are local tests—not a real authenticated production integration test. No new account was created for a production reuse test.
 
-## Deployment and manual configuration
-- Existing Vercel production previously reported READY/PROMOTED from commit `2f6cdd5`; it does not include this new user-management implementation.
-- Existing `secure-bluepeak-admin` Edge Function was previously reported ACTIVE v2; its deployed source does not yet include these new actions.
-- Before enabling the feature: apply the new migration, deploy `secure-bluepeak-admin` from this package (including its colocated `.mjs` helper), and upload/push the Vercel frontend/gateway files through the owner's GitHub process. A Vercel Git deploy does not automatically deploy Supabase Functions or run SQL migrations unless an external CI workflow is configured.
-- Existing Supabase server-side `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` must remain configured. The service-role key must never be exposed in the archive, Vercel client code, GitHub, or chat.
-
-## Required private acceptance tests after deployment
-1. Disable a disposable buyer and verify Auth ban/profile status/audit/session revocation.
-2. Verify disabled login, existing session, and direct protected API are rejected.
-3. Enable that buyer and sign in using existing credentials; check profile and customer data survived and old sessions were not reactivated.
-4. Soft-delete a disposable buyer; verify it remains listed as Deleted but cannot sign in or use APIs.
-5. Verify non-owner cannot purge; owner can purge with exact typed confirmation; inspect related FK cleanup/anonymization and audit.
-6. Verify an administrator, owner, or last active administrator cannot be managed, and customers cannot call admin operations.
-7. Recheck login, logout, password reset, account creation, mobile UI, scanners, and desktop behavior.
-
-## Last updated
-Admin user-management update prepared for manual GitHub upload. No GitHub push, Supabase migration/function deployment, or Vercel deployment was performed in this task.
+## Delivery
+Complete no-secrets archive: `/home/user/BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`. It is prepared for manual upload to the existing GitHub repository. The required audit-actor migration is already applied, and the updated Supabase function is already deployed. After upload, wait for the Vercel deployment, then privately validate the UI with an authorized AAL2 admin and a disposable test customer.

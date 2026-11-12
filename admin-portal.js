@@ -1,6 +1,5 @@
 const $ = selector => document.querySelector(selector);
 const notice = $('#notice');
-let canPurgeDeletedUsers = false;
 
 async function api(action, extra = {}) {
   const controller = new AbortController();
@@ -95,8 +94,7 @@ async function loadUsers() {
 
   try {
     const data = await api('list-users');
-    canPurgeDeletedUsers = data.can_purge_deleted_users === true;
-    const users = Array.isArray(data.users) ? data.users : [];
+    const users = Array.isArray(data.users) ? data.users.filter(user => user.access_status !== 'deleted' && !user.deleted_at) : [];
     tbody.replaceChildren();
     if (!users.length) {
       const row = document.createElement('tr');
@@ -131,7 +129,7 @@ async function loadUsers() {
       actions.className = 'row-actions';
 
       const isBuyer = user.role === 'buyer';
-      const ownerNamed = user.username === 'owner';
+      const ownerNamed = user.username?.toLowerCase() === 'owner' || user.email?.toLowerCase() === 'min955379@gmail.com';
       if (isBuyer && !ownerNamed && label !== 'Deleted') {
         actions.append(makeAction('Reset password', '', async () => {
           if (!confirm(`Reset the password for ${user.username} (${user.email || 'email unavailable'})? Existing BluePeak sessions will be revoked.`)) return;
@@ -161,27 +159,10 @@ async function loadUsers() {
 
         actions.append(makeAction('Delete User', 'danger', async () => {
           const email = user.email || 'email unavailable';
-          if (!confirm(`Soft-delete this account?\n\nName: ${user.username}\nEmail: ${email}\n\nThe Auth account will be blocked and sessions revoked. Profile and related records will be retained. Only the designated owner can permanently purge a deleted account.`)) return;
-          const confirmation = prompt(`Type DELETE ${user.username} exactly to confirm.`);
-          if (confirmation !== `DELETE ${user.username}`) {
-            notice.textContent = 'Deletion cancelled: the confirmation text did not match.';
-            return;
-          }
-          const result = await api('delete-user', { username: user.username, confirmation });
-          notice.textContent = `Deleted ${user.username}; its records are retained in soft-deleted status.${result.warning ? ` ${result.warning}` : ''}`;
-          await loadUsers();
-        }));
-      } else if (isBuyer && label === 'Deleted' && canPurgeDeletedUsers && !ownerNamed) {
-        actions.append(makeAction('Permanently purge', 'purge', async () => {
-          const email = user.email || 'email unavailable';
-          if (!confirm(`Permanently purge ${user.username} (${email})? This removes the Auth identity, profile, and cascading session records. Historical audit/login records are retained with user references anonymized where the schema requires it. This cannot be undone.`)) return;
-          const confirmation = prompt(`Type PURGE ${user.username} exactly to permanently delete this user.`);
-          if (confirmation !== `PURGE ${user.username}`) {
-            notice.textContent = 'Permanent deletion cancelled: the confirmation text did not match.';
-            return;
-          }
-          const result = await api('purge-deleted-user', { username: user.username, confirmation });
-          notice.textContent = `Permanently purged ${user.username}.${result.warning ? ` ${result.warning}` : ''}`;
+          if (!confirm(`Permanently delete this account?\n\nName: ${user.username}\nEmail: ${email}\n\nThis immediately removes the Supabase Auth account, profile, and active sessions. Historical audit/login records may remain with the user reference detached. The username and email will be available for reuse. This cannot be undone.`)) return;
+          const result = await api('delete-user', { username: user.username, confirmation: `DELETE ${user.username}` });
+          row.remove();
+          notice.textContent = `Permanently deleted ${user.username}; the username and email are available for reuse.${result.warning ? ` ${result.warning}` : ''}`;
           await loadUsers();
         }));
       } else {

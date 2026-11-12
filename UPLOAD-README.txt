@@ -1,16 +1,15 @@
 BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE
 
-This is a complete source archive, not a small patch. Extract it and upload the files/directories while preserving the repository-root paths. Do not include .git metadata or local secrets.
+This is a complete source archive, not a small patch. Extract and upload the repository-root files/directories to the existing GitHub repository while preserving paths. Do not include .git metadata or local secrets. The repository owner performs the GitHub upload; the assistant does not push.
 
-Release order:
-1. Upload/push the GitHub source files yourself.
-2. Review and apply supabase/migrations/20261112150000_add_safe_user_management_status.sql against the existing Supabase project (check migration history first).
-3. Deploy Supabase Edge Function secure-bluepeak-admin from its directory so user-management-rules.mjs is bundled: supabase functions deploy secure-bluepeak-admin.
-4. Wait for Vercel to deploy the new GitHub commit.
-5. Test privately with an authorized AAL2 administrator and disposable buyer account.
+Release state:
+1. The updated secure-bluepeak-admin Supabase Edge Function is already ACTIVE version 5.
+2. Both migrations are applied to the linked production project: 20261112150559_add_safe_user_management_status and 20261112152724_detach_admin_audit_actor_on_auth_delete. The latter snapshots old audit actors and changes their FK to ON DELETE SET NULL so audit history cannot block deletion.
+3. Upload the source files manually and wait for Vercel's Git deployment to become READY/PROMOTED.
+4. Privately test with an authorized AAL2 administrator and a disposable buyer. The specifically named old test user was removed from production and its username/email are available; this agent did not create a replacement account.
 
-GitHub/Vercel deployment alone does not apply the database migration or deploy Supabase Edge Functions unless your CI explicitly performs those steps. Existing server-side Supabase secrets must remain configured. The archive contains no actual secret values, customer data, passwords, tokens, or Git credentials.
+GitHub/Vercel deployment alone does not deploy future Supabase Edge Function changes. Existing Supabase server-side secrets must remain configured; the archive contains no actual secret values, customer data, passwords, tokens, or Git credentials.
 
-Delete User performs a confirmed soft delete and retains profile/related records. Only the designated owner can permanently purge a soft-deleted buyer, with a separate exact typed confirmation. Never test against the owner or last administrator.
+Delete User now permanently deletes the Auth/profile/session identity after explicit confirmation. The table omits deleted accounts and legacy soft-deleted buyer collisions are cleaned during creation before identifiers are reused. Disable/Enable remains reversible. Never test destructive actions against the owner, last administrator, or a real customer.
 
-Validated locally: Node regression suites, JavaScript syntax checks, Edge Function TypeScript bundling, and mocked Playwright Active → Disabled → Active → Deleted → Purged UI flow. No production user was modified; real authenticated Supabase operations remain a manual post-deployment acceptance test.
+Local validation passed: all five Node test suites, syntax checks, Edge Function bundling and bundle syntax check, and git diff whitespace checks. These are not authenticated admin production tests.
