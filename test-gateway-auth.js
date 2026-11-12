@@ -76,6 +76,15 @@ function location(res) { return res.headers.location; }
   assert.match(loginPage.body, /username:f\.username\.value,password:f\.password\.value/);
   assert.match(loginPage.body, /window\.crypto\.getRandomValues/);
   assert.doesNotMatch(loginPage.body, /crypto\.randomUUID\(\)\.replaceAll/);
+  const designCss = await request('/bluepeak-design-system.css');
+  assert.equal(designCss.statusCode, 200, 'shared design tokens must load on signed-out routes');
+  assert.match(designCss.body, /--bp-bg-canvas:#09182C/);
+  const uiHelpers = await request('/bluepeak-ui.js');
+  assert.equal(uiHelpers.statusCode, 200, 'shared UI helpers must load on signed-out routes');
+  assert.match(uiHelpers.body, /bpConfirm/);
+  const font = await request('/fonts/inter-latin-variable.woff2');
+  assert.equal(font.statusCode, 200, 'local variable fonts must be available to sign-in pages');
+  assert.equal(font.headers['content-type'], 'font/woff2');
   let res = await request('/app');
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/');
   res = await request('/pattern-scanner.js');

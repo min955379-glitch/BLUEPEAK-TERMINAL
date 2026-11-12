@@ -1,220 +1,61 @@
 const $ = selector => document.querySelector(selector);
 const notice = $('#notice');
+let allUsers = [];
+let activeFilter = 'all';
 
 async function api(action, extra = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch('/api/admin', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action, ...extra }),
-      signal: controller.signal,
-    });
-    const data = await response.json().catch(() => ({ error: 'Invalid server response' }));
+    const response = await fetch('/api/admin', { method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'}, body:JSON.stringify({action,...extra}), signal:controller.signal });
+    const data = await response.json().catch(() => ({error:'Invalid server response'}));
     if (response.status === 401 || response.status === 403) {
-      location.replace('/admin');
+      window.bpToast?.warning('Session expired','Administrator verification is required. Redirecting to sign in.');
+      setTimeout(()=>location.replace('/admin'),650);
       throw new Error(data.error || 'Admin verification is required.');
     }
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   } catch (error) {
-    if (error.name === 'AbortError') {
-      throw new Error('The request timed out. Check your connection, then retry.');
-    }
+    if (error.name === 'AbortError') throw new Error('The request timed out. Check your connection, then retry.');
     throw error;
-  } finally {
-    clearTimeout(timeout);
+  } finally { clearTimeout(timeout); }
+}
+function date(value) {if(!value)return '—';const parsed=new Date(value);return Number.isNaN(+parsed)?'—':parsed.toLocaleString()}
+function relative(value){if(!value)return '';const seconds=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/1000));if(!Number.isFinite(seconds))return '';if(seconds<60)return `${seconds}s ago`;if(seconds<3600)return `${Math.floor(seconds/60)}m ago`;if(seconds<86400)return `${Math.floor(seconds/3600)}h ago`;return `${Math.floor(seconds/86400)}d ago`}
+function statusLabel(user){if(user.access_status==='approved'&&!user.revoked_at)return 'Active';if(user.access_status==='revoked'||user.revoked_at)return 'Disabled';return 'Pending'}
+function noticeText(text,kind='success'){if(notice)notice.textContent=text;if(kind==='error')window.bpToast?.error('Action failed',text);else if(kind==='warning')window.bpToast?.warning('Please note',text);else window.bpToast?.success('Updated',text)}
+function isOwner(user){return user.username?.toLowerCase()==='owner'||user.email?.toLowerCase()==='min955379@gmail.com'}
+function makeAction(label,className,handler){const button=document.createElement('button');button.className=`action ${className||''}`.trim();button.type='button';button.textContent=label;button.addEventListener('click',async()=>{button.disabled=true;try{await handler()}catch(error){if(notice)notice.textContent=error.message;window.bpToast?.error('Request failed',error.message)}finally{button.disabled=false}});return button}
+function initials(user){return (user.username||user.email||'BP').split(/[^a-z0-9]+/i).filter(Boolean).slice(0,2).map(s=>s[0].toUpperCase()).join('')||'BP'}
+function updateCounts(users){const active=users.filter(u=>statusLabel(u)==='Active').length,disabled=users.filter(u=>statusLabel(u)==='Disabled').length,admins=users.filter(u=>u.role==='admin').length;[['#kpi-total',users.length],['#kpi-active',active],['#kpi-disabled',disabled],['#kpi-admins',admins],['#user-count',active]].forEach(([selector,value])=>{const el=$(selector);if(el)el.textContent=String(value)});const counts={all:users.length,Active:active,Disabled:disabled,admin:admins,buyer:users.filter(u=>u.role==='buyer').length};document.querySelectorAll('[data-filter]').forEach(btn=>{const b=btn.querySelector('b');if(b)b.textContent=String(counts[btn.dataset.filter]||0)})}
+function rowSkeleton(tbody){tbody.replaceChildren();for(let i=0;i<4;i++){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=6;const sk=document.createElement('div');sk.className='skeleton';sk.setAttribute('aria-hidden','true');cell.append(sk);row.append(cell);tbody.append(row)}}
+function renderUsers(){const tbody=$('#users');if(!tbody)return;const query=($('#users-search')?.value||'').trim().toLowerCase();let users=allUsers.filter(user => user.access_status !== 'deleted' && !user.deleted_at);if(query)users=users.filter(user=>`${user.username||''} ${user.email||''}`.toLowerCase().includes(query));if(activeFilter==='Active'||activeFilter==='Disabled')users=users.filter(user=>statusLabel(user)===activeFilter);else if(activeFilter==='admin'||activeFilter==='buyer')users=users.filter(user=>user.role===activeFilter);tbody.replaceChildren();if(!users.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=6;cell.className='empty';cell.textContent='No matching accounts.';row.append(cell);tbody.append(row);return}
+  for(const user of users){const row=document.createElement('tr');row.dataset.userId=user.user_id||'';const nameCell=document.createElement('td'),identity=document.createElement('div'),avatar=document.createElement('span'),name=document.createElement('span');identity.className='bp-user-cell';avatar.className='bp-avatar';avatar.textContent=initials(user);avatar.setAttribute('aria-hidden','true');name.className='user-name';name.textContent=user.username||'—';identity.append(avatar,name);nameCell.append(identity);
+    const emailCell=document.createElement('td');emailCell.className='email';emailCell.textContent = user.email; if(!user.email)emailCell.textContent='—';const roleCell=document.createElement('td'),role=document.createElement('span');role.className=`role ${user.role==='admin'?'admin':''}`;role.textContent=user.role||'—';roleCell.append(role);
+    const statusCell=document.createElement('td'),label=statusLabel(user),pill=document.createElement('span');pill.className=`status-pill ${label==='Active'?'status-active':'status-disabled'}`;pill.textContent=label;statusCell.append(pill);
+    const dateCell=document.createElement('td'),registered=document.createElement('span');dateCell.className='registered';registered.textContent=relative(user.created_at)||'—';const full=document.createElement('small');full.textContent=date(user.created_at);registered.append(full);dateCell.append(registered);
+    const actionsCell=document.createElement('td'),actions=document.createElement('div');actions.className='row-actions';const ownerNamed=isOwner(user),isBuyer=user.role==='buyer';
+    if(ownerNamed){const protectedLabel=document.createElement('span');protectedLabel.className='protected';protectedLabel.textContent='♢ Protected Owner';actions.append(protectedLabel)}
+    else if(isBuyer){
+      actions.append(makeAction('Reset password','',async()=>{const accepted=await window.bpConfirm({title:'Reset password?',message:'A temporary password will be generated and active sessions will be revoked. Copy and share it securely.',user:{username:user.username,email:user.email,role:user.role},confirmLabel:'Reset password',busyLabel:'Saving…',onConfirm:()=>api('reset-user-password',{username:user.username}).then(result=>{noticeText(`One-time password for ${result.username}: ${result.temporary_password}. Copy it now and share it securely; it will not be shown again.`);return result})});if(!accepted.confirmed)return}));
+      if(label==='Active')actions.append(makeAction('Disable access','',async()=>{await window.bpConfirm({title:'Disable access?',message:'This prevents new sign-ins and revokes the user’s active sessions. The account and data remain; access can be restored later.',user:{username:user.username,email:user.email,role:user.role},confirmLabel:'Disable access',busyLabel:'Disabling…',onConfirm:()=>api('disable-user',{username:user.username}).then(async result=>{row.remove();noticeText(`Access disabled for ${user.username}.${result.warning?` ${result.warning}`:''}`);await loadUsers();return result})})}));
+      else actions.append(makeAction('Enable access','enable',async()=>{const result=await api('enable-user',{username:user.username});noticeText(`Access restored for ${user.username}. They can sign in with their existing password.${result.warning?` ${result.warning}`:''}`);await loadUsers()}));
+      actions.append(makeAction('Delete User','danger',async()=>{await window.bpConfirm({title:'Permanently delete this account?',message:'This immediately and permanently removes the Auth account, profile, and active sessions. Historical audit snapshots are retained. The username and email will immediately become available for reuse. This action cannot be undone.',user:{username:user.username,email:user.email,role:user.role},confirmLabel:'Delete User',busyLabel:'Deleting…',danger:true,requireText:`DELETE ${user.username}`,onConfirm:()=>api('delete-user',{username:user.username,confirmation:`DELETE ${user.username}`}).then(async result=>{row.style.transition='opacity 180ms, transform 180ms';row.style.opacity='0';row.style.transform='translateX(8px)';setTimeout(()=>row.remove(),190);allUsers=allUsers.filter(item=>item.user_id!==user.user_id);updateCounts(allUsers);noticeText(`Permanently deleted ${user.username}; the username and email are available for reuse.${result.warning?` ${result.warning}`:''}`);await loadUsers();return result})})}));
+    }else{const protectedLabel=document.createElement('span');protectedLabel.className='protected';protectedLabel.textContent=user.role==='admin'?'♢ Protected Admin':'—';actions.append(protectedLabel)}
+    actionsCell.append(actions);row.append(nameCell,emailCell,roleCell,statusCell,dateCell,actionsCell);tbody.append(row);
   }
 }
-
-function date(value) {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  return Number.isNaN(+parsed) ? '—' : parsed.toLocaleString();
-}
-
-function statusLabel(user) {
-  if (user.access_status === 'deleted' || user.deleted_at) return 'Deleted';
-  if (user.access_status === 'approved' && !user.revoked_at) return 'Active';
-  if (user.access_status === 'revoked' || user.revoked_at) return 'Disabled';
-  return 'Pending';
-}
-
-function statusClass(label) {
-  return ({ Active: 'status-active', Disabled: 'status-disabled', Deleted: 'status-deleted', Pending: 'status-pending' })[label] || 'status-protected';
-}
-
-function makeAction(label, className, handler) {
-  const button = document.createElement('button');
-  button.className = `action ${className || ''}`.trim();
-  button.type = 'button';
-  button.textContent = label;
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    try {
-      await handler();
-    } catch (error) {
-      if (notice) notice.textContent = error.message;
-    } finally {
-      button.disabled = false;
-    }
-  });
-  return button;
-}
-
-function addLoadError(tbody, error) {
-  tbody.replaceChildren();
-  const row = document.createElement('tr');
-  const cell = document.createElement('td');
-  cell.colSpan = 6;
-  cell.setAttribute('role', 'status');
-  cell.append(document.createTextNode(`Could not load users: ${error.message} `));
-  const retry = document.createElement('button');
-  retry.className = 'action';
-  retry.type = 'button';
-  retry.textContent = 'Retry';
-  retry.addEventListener('click', () => loadUsers());
-  cell.append(retry);
-  row.append(cell);
-  tbody.append(row);
-}
-
-async function loadUsers() {
-  const tbody = $('#users');
-  if (!tbody) return;
-  tbody.replaceChildren();
-  const loadingRow = document.createElement('tr');
-  const loadingCell = document.createElement('td');
-  loadingCell.colSpan = 6;
-  loadingCell.textContent = 'Loading users…';
-  loadingRow.append(loadingCell);
-  tbody.append(loadingRow);
-
-  try {
-    const data = await api('list-users');
-    const users = Array.isArray(data.users) ? data.users.filter(user => user.access_status !== 'deleted' && !user.deleted_at) : [];
-    tbody.replaceChildren();
-    if (!users.length) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 6;
-      cell.textContent = 'No accounts found.';
-      row.append(cell);
-      tbody.append(row);
-      return;
-    }
-
-    for (const user of users) {
-      const row = document.createElement('tr');
-      const nameCell = document.createElement('td');
-      nameCell.className = 'user-name';
-      nameCell.textContent = user.username || '—';
-      const emailCell = document.createElement('td');
-      emailCell.className = 'email';
-      emailCell.textContent = user.email || '—';
-      const roleCell = document.createElement('td');
-      roleCell.textContent = user.role || '—';
-      const statusCell = document.createElement('td');
-      const label = statusLabel(user);
-      const pill = document.createElement('span');
-      pill.className = `status-pill ${statusClass(label)}`;
-      pill.textContent = label;
-      statusCell.append(pill);
-      const dateCell = document.createElement('td');
-      dateCell.textContent = date(user.created_at);
-      const actionsCell = document.createElement('td');
-      const actions = document.createElement('div');
-      actions.className = 'row-actions';
-
-      const isBuyer = user.role === 'buyer';
-      const ownerNamed = user.username?.toLowerCase() === 'owner' || user.email?.toLowerCase() === 'min955379@gmail.com';
-      if (isBuyer && !ownerNamed && label !== 'Deleted') {
-        actions.append(makeAction('Reset password', '', async () => {
-          if (!confirm(`Reset the password for ${user.username} (${user.email || 'email unavailable'})? Existing BluePeak sessions will be revoked.`)) return;
-          const result = await api('reset-user-password', { username: user.username });
-          notice.textContent = `One-time password for ${result.username}: ${result.temporary_password}\nCopy it now and share it securely; it will not be shown again.`;
-        }));
-
-        if (label === 'Active') {
-          actions.append(makeAction('Disable access', 'disable', async () => {
-            if (!confirm(`Disable ${user.username} (${user.email || 'email unavailable'})? Their current sessions will be revoked. Their account and data will be kept, and access can be restored later.`)) return;
-            const result = await api('disable-user', { username: user.username });
-            notice.textContent = `Access disabled for ${user.username}.${result.warning ? ` ${result.warning}` : ''}`;
-            await loadUsers();
-          }));
-        } else if (label === 'Disabled' || label === 'Pending') {
-          actions.append(makeAction('Enable access', 'enable', async () => {
-            const result = await api('enable-user', { username: user.username });
-            notice.textContent = `Access restored for ${user.username}. They can sign in with their existing password.${result.warning ? ` ${result.warning}` : ''}`;
-            await loadUsers();
-          }));
-        } else {
-          const pending = document.createElement('span');
-          pending.className = 'status-pill status-pending';
-          pending.textContent = 'Awaiting admin review';
-          actions.append(pending);
-        }
-
-        actions.append(makeAction('Delete User', 'danger', async () => {
-          const email = user.email || 'email unavailable';
-          if (!confirm(`Permanently delete this account?\n\nName: ${user.username}\nEmail: ${email}\n\nThis immediately removes the Supabase Auth account, profile, and active sessions. Historical audit/login records may remain with the user reference detached. The username and email will be available for reuse. This cannot be undone.`)) return;
-          const result = await api('delete-user', { username: user.username, confirmation: `DELETE ${user.username}` });
-          row.remove();
-          notice.textContent = `Permanently deleted ${user.username}; the username and email are available for reuse.${result.warning ? ` ${result.warning}` : ''}`;
-          await loadUsers();
-        }));
-      } else {
-        const protectedLabel = document.createElement('span');
-        protectedLabel.className = 'status-pill status-protected';
-        protectedLabel.textContent = ownerNamed || user.role === 'admin' ? 'Protected account' : '—';
-        actions.append(protectedLabel);
-      }
-
-      actionsCell.append(actions);
-      row.append(nameCell, emailCell, roleCell, statusCell, dateCell, actionsCell);
-      tbody.append(row);
-    }
-  } catch (error) {
-    addLoadError(tbody, error);
-  }
-}
-
+function addLoadError(tbody,error){tbody.replaceChildren();const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=6;cell.className='empty';cell.setAttribute('role','status');cell.append(document.createTextNode(`Could not load users: ${error.message} `));const retry=document.createElement('button');retry.className='action';retry.type='button';retry.textContent = 'Retry';retry.addEventListener('click',()=>loadUsers());cell.append(retry);row.append(cell);tbody.append(row)}
+async function loadUsers(){const tbody=$('#users');if(!tbody)return;rowSkeleton(tbody);try{const data=await api('list-users');const users=Array.isArray(data.users)?data.users.filter(user => user.access_status !== 'deleted' && !user.deleted_at):[];allUsers=users;updateCounts(users);renderUsers()}catch(error){addLoadError(tbody,error)}}
 if ($('#users')) loadUsers();
-
-const form = $('#create-form');
-if (form) form.addEventListener('submit', async event => {
-  event.preventDefault();
-  const button = $('#create-button');
-  const username = form.elements.username.value;
-  const password = form.elements.password.value;
-  button.disabled = true;
-  try {
-    const result = await api('create-user', { username, password });
-    notice.textContent = `Created ${result.username}. Save the password you entered and share it securely; it cannot be viewed later.`;
-    form.reset();
-    await loadUsers();
-  } catch (error) {
-    notice.textContent = error.message;
-  } finally {
-    button.disabled = false;
-  }
-});
-
-const count = $('#user-count');
-if (count) {
-  api('list-users')
-    .then(data => { count.textContent = String((data.users || []).filter(user => user.role === 'buyer' && user.access_status === 'approved' && !user.revoked_at && !user.deleted_at).length); })
-    .catch(error => { if (notice) notice.textContent = error.message; });
-}
-
-const signout = $('#signout');
-if (signout) signout.onclick = async () => {
-  signout.disabled = true;
-  try {
-    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
-  } finally {
-    location.replace('/admin');
-  }
-};
+const createForm=$('#create-form');if(createForm)createForm.addEventListener('submit',async event=>{event.preventDefault();const button=$('#create-button'),username=createForm.elements.username.value.trim(),password=createForm.elements.password.value;const requirements={length:password.length>=12,upper:/[A-Z]/.test(password),lower:/[a-z]/.test(password),number:/[0-9]/.test(password)};if(!username||Object.values(requirements).some(value=>!value)){const invalid=createForm.elements.password;invalid.setAttribute('aria-invalid','true');invalid.focus();window.bpToast?.warning('Check the password','Use at least 12 characters with uppercase, lowercase, and a number.');return}button.disabled=true;button.setAttribute('aria-busy','true');try{const result=await api('create-user',{username,password});noticeText(`Created ${result.username}. Save the password you entered and share it securely; it cannot be viewed later.`);createForm.reset();document.querySelectorAll('[data-requirement]').forEach(el=>el.dataset.met='false');await loadUsers()}catch(error){noticeText(error.message,'error');createForm.elements.username.setAttribute('aria-invalid','true')}finally{button.disabled=false;button.removeAttribute('aria-busy')}});
+function updateRequirements(){const password=$('#password')?.value||'',checks={length:password.length>=12,upper:/[A-Z]/.test(password),lower:/[a-z]/.test(password),number:/[0-9]/.test(password)};document.querySelectorAll('[data-requirement]').forEach(el=>el.dataset.met=String(Boolean(checks[el.dataset.requirement])));$('#password')?.removeAttribute('aria-invalid')}
+$('#password')?.addEventListener('input',updateRequirements);
+$('#generate-password')?.addEventListener('click',()=>{const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?';const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);const chars=Array.from(bytes,b=>alphabet[b%alphabet.length]);chars[0]='A';chars[1]='b';chars[2]='7';chars[3]='!';const password=chars.join('');$('#password').value=password;$('#password').type='text';updateRequirements();$('#password').focus();window.bpToast?.success('Password generated','A strong temporary password is visible in the form.')});
+$('#copy-credentials')?.addEventListener('click',async event=>{const username=$('#username')?.value.trim()||'',password=$('#password')?.value||'';if(!username||!password){window.bpToast?.warning('Credentials incomplete','Enter a username and password first.');return}try{await navigator.clipboard.writeText(`Username: ${username}\nPassword: ${password}`);const button=event.currentTarget,old=button.textContent;button.textContent='Copied!';button.style.color='var(--bp-accent-gold)';setTimeout(()=>{button.textContent=old;button.style.color=''},1800);window.bpToast?.success('Copied credentials','Store and share these details securely.')}catch{window.bpToast?.error('Copy unavailable','Clipboard permission was not granted.')}});
+$('#users-search')?.addEventListener('input',renderUsers);document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{activeFilter=button.dataset.filter;document.querySelectorAll('[data-filter]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));renderUsers()}));
+const count=$('#user-count');if(!$('#users')&&($('#kpi-total')||count))api('list-users').then(data=>updateCounts((data.users||[]).filter(user => user.access_status !== 'deleted' && !user.deleted_at))).catch(error=>{if(notice)notice.textContent=error.message});
+async function loadAudit(){const feed=$('#audit-feed');if(!feed)return;try{const data=await api('list-audit');feed.replaceChildren();if(!Array.isArray(data.events)||!data.events.length){feed.textContent='No administrative events yet.';return}for(const event of data.events){const item=document.createElement('div');item.className='bp-audit-item';for(const [className,text] of [['bp-audit-actor',event.actor||'—'],['bp-audit-action',String(event.action||'').replaceAll('_',' ')],['bp-audit-target',event.target||'—'],['bp-audit-time',date(event.created_at)]]){const cell=document.createElement('span');cell.className=className;cell.textContent=text;item.append(cell)}feed.append(item)}}catch(error){feed.textContent=`Audit feed unavailable: ${error.message}`}}
+loadAudit();
+$('#refresh')?.addEventListener('click',()=>loadUsers());$('#signout')?.addEventListener('click',async event=>{event.currentTarget.disabled=true;try{await fetch('/api/logout',{method:'POST',credentials:'same-origin'})}finally{location.replace('/admin')}});

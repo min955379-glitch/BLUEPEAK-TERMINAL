@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/gateway.js": {
-      "includeFiles": "{index.html,pattern-scanner.js,scan-watched-assets.js,bluepeak-access-ui.js,admin-dashboard.html,admin-users.html,admin-portal.js,favicon.svg,fonts/**}"
+      "includeFiles": "{index.html,pattern-scanner.js,scan-watched-assets.js,bluepeak-access-ui.js,bluepeak-design-system.css,bluepeak-ui.js,admin-dashboard.html,admin-users.html,admin-portal.js,favicon.svg,fonts/**}"
     }
   },
   "routes": [

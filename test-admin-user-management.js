@@ -118,6 +118,8 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
   assert.match(auditMigration, /actor_user_id_snapshot/);
   assert.match(auditMigration, /actor_username/);
   assert.match(functionSource, /actor_user_id_snapshot: adminId/);
+  assert.match(functionSource, /actor_username: actor\?\.username \|\| null/);
+  assert.match(functionSource, /if \(action === 'list-audit'\)/);
   assert.match(baseSchema, /bp_profiles \([\s\S]*?user_id uuid primary key references auth\.users\(id\) on delete cascade/);
   assert.match(baseSchema, /bp_active_sessions \([\s\S]*?user_id uuid not null references auth\.users\(id\) on delete cascade/);
   assert.match(baseSchema, /user_id uuid references auth\.users\(id\) on delete set null/);
@@ -134,5 +136,31 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
   assert.match(usersHtml, /Delete User permanently removes the account after confirmation/);
   assert.doesNotMatch(usersHtml, /recoverable soft delete|Permanently purge|action\.purge/);
 
-  console.log('PASS test-admin-user-management: disable/enable safeguards, immediate hard delete, FK/session cleanup, hidden deleted rows, soft-deleted collision cleanup/reuse, owner/self/last-admin protections, confirmation, MFA/AAL2, and UI/gateway contracts.');
+  const cleanupMigration = fs.readFileSync('./supabase/migrations/20261112160047_purge_legacy_soft_deleted_buyers.sql', 'utf8');
+  assert.match(cleanupMigration, /role = 'buyer'/);
+  assert.match(cleanupMigration, /access_status = 'deleted' OR profile\.deleted_at IS NOT NULL/);
+  assert.match(cleanupMigration, /deleted_username_snapshot/);
+  assert.match(cleanupMigration, /DELETE FROM auth\.users/);
+  assert.match(cleanupMigration, /historical login\/audit records retain/);
+
+  // Color audit covers the named UI, scripts, SVG markup and inline styles. Green-hued
+  // literals and named green-family colors are prohibited; gold/amber and blue are allowed.
+  const zeroGreenFiles = ['index.html','admin-dashboard.html','admin-users.html','bluepeak-access-ui.js',
+    'admin-portal.js','pattern-scanner.js','scan-watched-assets.js','api/gateway.js','bluepeak-design-system.css','favicon.svg'];
+  const colorSource = zeroGreenFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n');
+  assert.doesNotMatch(colorSource, /\b(?:green|emerald|lime|teal)\b|--green/i, 'named green-family colors are prohibited');
+  const hsv = (r,g,b) => {const max=Math.max(r,g,b),min=Math.min(r,g,b),delta=max-min;let h=0;if(delta){if(max===r)h=((g-b)/delta)%6;else if(max===g)h=(b-r)/delta+2;else h=(r-g)/delta+4;h*=60;if(h<0)h+=360}return {h,s:max===0?0:delta/max,v:max}};
+  for (const literal of colorSource.match(/#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g)||[]) {
+    const hex=literal.slice(1,7),rgb=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255),{h,s,v}=hsv(...rgb);
+    assert.ok(!(h>=75&&h<=170&&s>=.2&&v>=.18), `green-hued color literal found: ${literal}`);
+  }
+  for (const match of colorSource.matchAll(/(rgba?|hsla?)\(([^)]*)\)/gi)) {
+    const values=(match[2].match(/-?\d+(?:\.\d+)?/g)||[]).map(Number);let hue,saturation,brightness;
+    if(match[1].toLowerCase().startsWith('rgb')&&values.length>=3){({h:hue,s:saturation,v:brightness}=hsv(...values.slice(0,3).map(value=>Math.max(0,Math.min(255,value))/255)))}
+    else if(match[1].toLowerCase().startsWith('hsl')&&values.length>=3){hue=((values[0]%360)+360)%360;saturation=values[1]/100;brightness=values[2]/100}
+    else continue;
+    assert.ok(!(hue>=75&&hue<=170&&saturation>=.2&&brightness>=.18), `green-hued functional color found: ${match[0]}`);
+  }
+
+  console.log('PASS test-admin-user-management: disable/enable safeguards, immediate hard delete, FK/session cleanup, hidden deleted rows, soft-deleted collision cleanup/reuse, owner/self/last-admin protections, confirmation, MFA/AAL2, migration and zero-green UI contracts.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

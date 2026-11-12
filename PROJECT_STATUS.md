@@ -1,43 +1,39 @@
 # BluePeak Terminal — Project Status
 
-## Current request
-Implement direct Delete User behavior with immediate username/email reuse, remove deleted rows from the Admin Users table, keep owner/self/last-active-admin safeguards, preserve Disable/Enable, update the project docs, deploy the Edge Function, clean up the specifically named old test account, and deliver a complete ZIP. The repository owner uploads the ZIP to GitHub; the assistant does not push.
+## Current request and constraints
+Upgrade the institutional UI and backend workflows while preserving the native HTML/CSS/vanilla-JS, Node gateway, Supabase Auth/MFA/AAL2, RLS, and Edge Function architecture. Keep username/email reuse immediate after deletion, enforce protection server-side, do not expose secrets, and do not push to GitHub. Deliver a verified ZIP and distinguish authenticated production verification from source-level tests.
 
-## Implemented source changes
-- **Delete User:** after one explicit confirmation that names the username/email and explains irreversibility, the server deletes the customer's Supabase Auth identity. Verified Auth FKs cascade-delete `bp_profiles`, `bp_active_sessions`, and Auth sessions; nullable historical references are detached. The audit snapshot stores username/email as details with a null target reference.
-- **Immediate reuse:** when creating a user, the function checks both username and normalized email. A matching soft-deleted buyer identity is permanently cleaned up (Auth deletion cascades to its profile/sessions), cleanup is verified, then creation continues. Active records and owner/admin identities remain conflicts.
-- **Admin table:** server and browser filters omit deleted profiles. The row is removed immediately after a successful response; there is no Deleted status row or Permanently purge button/action.
-- **Security:** AAL2/MFA, approved admin role, active administrator session, server-side user checks, exact DELETE confirmation, owner username/email protection, self-protection, and admin/last-admin protections are retained. Disable/Enable behavior is unchanged.
-- **Database:** `20261112152724_detach_admin_audit_actor_on_auth_delete.sql` is applied. It snapshots existing audit actors and makes the audit-actor FK nullable with `ON DELETE SET NULL`; the earlier status migration is also applied. Profile/session cascades and nullable historical references were verified.
+## Implemented in the current worktree
+- Added `bluepeak-design-system.css` with navy/ivory/gold tokens, shared responsive components, local font faces, table/card/KPI/skeleton/toast/dialog styles, and terminal class mappings.
+- Added `bluepeak-ui.js` with stacked accessible notifications, native confirmation dialogs with focus containment, password visibility toggles, and keyboard shortcuts.
+- Restored and styled the existing customer terminal in `index.html`; wired the shared CSS and helper assets through public gateway routes while keeping the terminal route itself protected.
+- Restyled `admin-dashboard.html` and `admin-users.html`; added KPI cards, provisioning password generation/copy/requirements, search/filter/counts, loading skeletons, and audit display.
+- Reworked `admin-portal.js` for escaped text rendering, modal confirmations, immediate row removal and count refresh, user/audit loading, password reset, and 401/403 session handling.
+- Updated `bluepeak-access-ui.js`, `pattern-scanner.js`, and `api/gateway.js` for tokenized scanner styles, positive gold states, expiry redirects, and public delivery of CSS/helper/font assets. Added `list-audit` to the AAL2-secured admin Edge Function.
+- Added `supabase/migrations/20261112160047_purge_legacy_soft_deleted_buyers.sql`. Single-step deletion and create-time stale-record cleanup remain server-side. Owner, self, and last-active-admin protections remain enforced.
+- Added a regression test for the legacy cleanup migration and a green-family color literal/name scan.
 
-## Production actions and deployment
-- Updated `secure-bluepeak-admin` is **ACTIVE version 5** in Supabase project `ivpzznjunvxdfnpzggxp`.
-- Anonymous POST probe to the function returned **401 — Admin authentication required**. No authenticated admin session was available; no authenticated feature action was exercised.
-- The named production soft-deleted test account `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` was verified as a buyer soft-deleted profile, then removed with a guarded exact-ID/email/username/status SQL delete. Post-delete queries confirmed **0 Auth users, 0 profiles, and 0 application sessions** for that identity. The username/email are free. No replacement account was created.
-- A database audit row (ID 14) records this one-off user-requested maintenance cleanup, its timestamp, target snapshot, and that it ran through the Supabase SQL connector rather than an authenticated app-admin session. Future UI deletions use the deployed AAL2 server handler and actor snapshot.
-- The Vercel site is still on the prior user-pushed commit until the repository owner uploads these files and Vercel deploys them. This assistant made no GitHub push.
+## Production backend and database
+- Migration `purge_legacy_soft_deleted_buyers` version `20261112160047` is applied to Supabase project `ivpzznjunvxdfnpzggxp`. Preflight found zero soft-deleted buyers; post-migration counts confirm zero remaining.
+- `secure-bluepeak-admin` is ACTIVE version 8. Unauthenticated access remains expected to fail; admin actions require AAL2, admin role, and a live server-side session.
+- The previously requested production identity `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` remains absent from Auth/profile/linked active-session records. Audit snapshots are retained. No replacement account was created.
+- No authenticated admin session was used. Production UI acceptance and actual same-identifier recreation are therefore unverified.
 
-## Files updated for this request
-- `admin-users.html`, `admin-portal.js`, `api/gateway.js`
-- `supabase/functions/secure-bluepeak-admin/index.ts`
-- `supabase/functions/secure-bluepeak-admin/user-management-rules.mjs`
-- `test-admin-user-management.js`, `test-gateway-auth.js`
-- `README.md`, `PLAN.md`, `ROADMAP.md`, `PROJECT_STATUS.md`
-- Supporting source/deployment/upload documentation and inventory
+## Tests and checks
+All pass in this worktree:
 
-The archive includes both schema migrations. Production history records the status migration as `20261112150559_add_safe_user_management_status` and the new audit-actor migration as `20261112152724_detach_admin_audit_actor_on_auth_delete`.
-
-## Tests run locally
-- `node test-admin-user-management.js`
 - `node test-gateway-auth.js`
+- `node test-admin-user-management.js`
 - `node test-pattern-scanner.js`
 - `node test-asset-scanner.js`
 - `node test-v1.js`
-- Node syntax checks for gateway, admin UI, and test files
-- esbuild Edge Function bundle and `node --check` on generated bundle
+- `node --check api/gateway.js`, `bluepeak-ui.js`, `admin-portal.js`, `pattern-scanner.js`, `scan-watched-assets.js`, and `bluepeak-access-ui.js`
+- `python3 -m json.tool vercel.json`
 - `git diff --check`
 
-All passed. Policy/source-contract tests include direct deletion, list filtering, soft-deleted collision cleanup, same-identifier reuse policy, session/FK semantics, MFA/AAL2, and owner/self/last-admin restrictions. They are local tests—not a real authenticated production integration test. No new account was created for a production reuse test.
+The suites are local source-contract/mocked tests. They are not evidence of authenticated production use.
 
-## Delivery
-Complete no-secrets archive: `/home/user/BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`. It is prepared for manual upload to the existing GitHub repository. The required audit-actor migration is already applied, and the updated Supabase function is already deployed. After upload, wait for the Vercel deployment, then privately validate the UI with an authorized AAL2 admin and a disposable test customer.
+## Deployment and next steps
+- The frontend/gateway source has not been pushed (repository owner uploads manually). Vercel's latest production deployment is READY/PROMOTED for prior commit `a33905cb60c18e78128bcf829e7d191bf05e4c93`; it does not include this worktree's upgrade.
+- Complete and validate `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip`, excluding `.env`, `.vercel`, and `node_modules`.
+- After the repository owner uploads the files, verify Vercel is READY/PROMOTED. Then run authorized AAL2 UI acceptance on disposable identities; no deletion of the owner, last admin, or real customer.

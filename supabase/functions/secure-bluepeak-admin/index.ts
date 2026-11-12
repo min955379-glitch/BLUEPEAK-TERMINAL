@@ -1,14 +1,20 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
-import {
-  disableProfilePatch,
-  enableProfilePatch,
-  hasExactConfirmation,
-  isProtectedOwnerIdentity,
-  isSoftDeletedBuyer,
-  isUserListed,
-  isProfileEnabled,
-  targetProtectionError,
-} from './user-management-rules.mjs';
+const DELETED_STATUS = 'deleted';
+function disableProfilePatch(now: string) { return { access_status: 'revoked', revoked_at: now, revoked_reason: 'Administrator disabled access' }; }
+function enableProfilePatch(actorId: string, now: string) { return { access_status: 'approved', approved_at: now, approved_by: actorId, revoked_at: null, revoked_reason: null }; }
+function hasExactConfirmation(expected: string, provided: unknown) { return typeof provided === 'string' && provided === expected; }
+function isProfileEnabled(profile: any) { return profile?.access_status === 'approved' && !profile.revoked_at && !profile.deleted_at; }
+function isUserListed(profile: any) { return profile?.access_status !== DELETED_STATUS && !profile?.deleted_at; }
+function isSoftDeletedBuyer(profile: any) { return profile?.role === 'buyer' && (profile.access_status === DELETED_STATUS || Boolean(profile.deleted_at)); }
+function isProtectedOwnerIdentity(profile: any) { return profile?.username?.toLowerCase() === 'owner' || profile?.email?.toLowerCase() === 'min955379@gmail.com'; }
+function targetProtectionError(target: any, actor: any, activeAdminCount = 0) {
+  if (!target) return 'User not found.';
+  if (target.user_id === actor?.user_id) return 'You cannot manage your own account here.';
+  if (isProtectedOwnerIdentity(target)) return 'The designated owner account is protected.';
+  if (target.role === 'admin') return activeAdminCount <= 1 ? 'The last active administrator is protected.' : 'Administrator accounts cannot be changed in customer user management.';
+  if (target.role !== 'buyer') return 'Only customer accounts can be managed here.';
+  return null;
+}
 
 const URL = Deno.env.get('SUPABASE_URL')!;
 const ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -23,7 +29,11 @@ const headers = {
 const out = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers });
 const bad = (message: string, status = 400) => out({ error: message }, status);
 const nameOk = (value: string) => /^[A-Za-z0-9._-]{3,32}$/.test(value);
-const emailOk = (value: string) => value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const emailOk = (value: string) => {
+  if (value.length > 254 || value !== value.trim() || Array.from(value).some(character => character.charCodeAt(0) <= 32)) return false;
+  const at = value.indexOf('@');
+  return at > 0 && at === value.lastIndexOf('@') && value.lastIndexOf('.') > at + 1 && value.lastIndexOf('.') < value.length - 1;
+};
 const identifierOk = (value: string) => value === value.trim() && (nameOk(value) || emailOk(value));
 const strong = (value: string) => value.length >= 12 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
 const emailFor = (username: string) => `${username.toLowerCase()}@users.bluepeak.invalid`;
@@ -39,11 +49,12 @@ function claims(token: string) {
 }
 
 async function audit(adminId: string, action: string, targetId: string | null, details: Record<string, unknown>) {
+  const { data: actor } = await db.from('bp_profiles').select('username,email').eq('user_id', adminId).maybeSingle();
   const { error } = await db.from('bp_admin_audit').insert({
     admin_user_id: adminId,
     action,
     target_user_id: targetId,
-    details: { ...details, actor_user_id_snapshot: adminId },
+    details: { ...details, actor_user_id_snapshot: adminId, actor_username: actor?.username || null, actor_email: actor?.email || null },
   });
   return error?.message || null;
 }
@@ -106,6 +117,26 @@ Deno.serve(async request => {
 
   const action = String(body.action || '');
   const actor = { user_id: authData.user.id, username: actorProfile.username };
+
+  if (action === 'list-audit') {
+    const { data: events, error } = await db.from('bp_admin_audit')
+      .select('id,action,created_at,admin_user_id,details')
+      .order('created_at', { ascending: false }).limit(30);
+    if (error) return bad('Could not load administrative audit events.', 500);
+    const actorIds = [...new Set((events || []).map(event => event.admin_user_id).filter(Boolean))];
+    const { data: actors, error: actorLookupError } = actorIds.length
+      ? await db.from('bp_profiles').select('user_id,username').in('user_id', actorIds)
+      : { data: [], error: null };
+    if (actorLookupError) return bad('Could not load audit actor names.', 500);
+    const actorNames = new Map((actors || []).map(actor => [actor.user_id, actor.username]));
+    return out({ events: (events || []).map(event => ({
+      id: event.id,
+      action: event.action,
+      created_at: event.created_at,
+      actor: actorNames.get(event.admin_user_id) || event.details?.actor_username || 'Former administrator',
+      target: event.details?.username || event.details?.email || '—',
+    })) });
+  }
 
   if (action === 'list-users') {
     const { data, error } = await db.from('bp_profiles')
