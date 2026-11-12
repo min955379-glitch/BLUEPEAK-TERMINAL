@@ -1,47 +1,49 @@
-# BluePeak / Terminal — Project Plan
+# BluePeak Terminal — Implementation Plan
 
-## Purpose
+## Objective
 
-Provide a fast, responsive, read-only market-data terminal for monitoring public crypto market data. This site displays market information; it does not place orders, manage funds, predict prices, or provide trading advice.
+Maintain the read-only market terminal while delivering genuine server-enforced customer access and a distinct owner/admin portal. Keep source and operational status synchronized between the local project, Vercel, Supabase, and GitHub.
 
-## Current scope
+## Current release work
 
-- Single-page static frontend (`index.html`) with no application server or database.
-- Responsive desktop, tablet, and mobile layouts.
-- Public Binance market data: combined WebSocket ticker, candle, depth, and aggregate-trade feeds, plus public REST data for snapshots/history.
-- Watchlist, candlestick chart, order book, market statistics, and technical overlays.
-- Always-visible Large Trades strip with minimum-size, asset, and highlight filters; session-only details; existing read-only and already-executed-trades notices.
-- Optional user-entered Ethereum address activity. No preloaded addresses, ownership assumptions, or exchange-wallet identity claims.
-- Client-side alerts, market monitor, annotations, and paper-trading simulation; no real orders or money.
+### A. Finish repository synchronization
+1. Use the existing public repository `https://github.com/min955379-glitch/BLUEPEAK-TERMINAL` on `main` (currently observed at `9583b209f29698c8fa65ba8843ea5ab406a54c69`).
+2. Overlay the latest project source and updated documentation without deleting unrelated repository files.
+3. Check `git status`, review the full diff, and confirm `.env`, credentials, and local `.vercel` state are excluded.
+4. Commit only the reviewed changes and push to `main` after GitHub authentication is available.
+5. Verify the remote commit and that README, ROADMAP, PLAN, and PROJECT_STATUS are present.
 
-## Delivery and deployment plan
+### B. Publish the admin-routing correction
+1. Deploy the updated package to the already-linked `bluepeak-terminal` Vercel project, production target.
+2. Confirm deployment state READY/PROMOTED and production alias `https://bluepeak-terminal.vercel.app/`.
+3. Check `/admin`, `/admin/dashboard`, `/admin/users`, `/app`, and the old `/app/admin` path while signed out, as a buyer, and as an AAL2 admin.
+4. Confirm the customer scanner and normal buyer login still work.
 
-1. **Keep the scope safe and simple**
-   - Keep the terminal client-side and read-only.
-   - Do not add a database, account system, order execution, or hidden wallet tracking.
-   - Preserve current market-data and on-chain disclaimers.
-2. **Verify the release**
-   - Check JavaScript syntax and the existing smoke tests.
-   - Test the real rendered page at desktop, tablet landscape, tablet portrait, and mobile sizes.
-   - Confirm the Binance combined WebSocket status and distinguish live entries from fixtures.
-   - Check that charts, filters, touch targets, and mobile navigation remain usable.
-3. **Publish**
-   - Deploy the static files to the specifically approved Vercel project or repository.
-   - Include the local fonts, favicon, and Open Graph image alongside the HTML.
-   - Verify the production URL and key features after deployment.
-4. **Maintain**
-   - Recheck public API compatibility, browser console/network failures, and responsive behavior when the watchlist or layout changes.
-   - Update documentation when features or data sources change.
+### C. Complete browser acceptance
+1. Private/incognito, signed out: landing page only; direct protected HTML, scripts and API requests denied.
+2. Buyer: login reaches `/app`; admin pages/API denied; sign-out works.
+3. Admin: `/admin` login with TOTP reaches `/admin/dashboard`; refresh and nav to `/admin/users` retain context; user operations work; sign-out returns to `/admin`.
+4. Check browser console, network requests, redirects, trailing slash handling, and session revocation.
+5. Record only observed results in PROJECT_STATUS and the release notes.
 
-## Release checks
+## Architecture and implementation constraints
 
-- No horizontal overflow at supported viewport sizes.
-- Large Trades displays only anonymous, already-executed public aggregate trades; `m: true` is taker SELL and `m: false` is taker BUY.
-- The default minimum is $250K and the session buffer captures eligible trades from $50K for immediate re-filtering.
-- No wallet addresses are preloaded; user labels do not imply verified ownership.
-- No price forecasts, recommendations, or real-order functionality are introduced.
-- Production HTML, fonts, SVG favicon, and social preview asset resolve successfully.
+- Static HTML/JavaScript market terminal, Vercel Node serverless gateway for route delivery, Supabase Auth + Edge Functions for identity and admin operations.
+- All routes are caught by `vercel.json`; gateway uses an allowlist and server-side session/role verification. Admin routes/API require active approved profile and AAL2.
+- Passwords belong to Supabase Auth's password hashing. No plaintext password storage or recovery; reset instead.
+- Auth tokens are Secure/HttpOnly cookies; service-role keys remain only in Supabase secrets. Do not add secrets to GitHub or browser code.
+- Preserve RLS; no customer registration route; public market feeds are not proprietary account data.
 
-## Deployment status
+## Verification commands
 
-The Vercel project `bluepeak-terminal` has been created and linked to the user-provided GitHub repository `min955379-glitch/BLUEPEAK-TERMINAL` (production branch `main`). No application files have been committed to GitHub or deployed to Vercel yet. The GitHub publishing connector is not available in this workspace, so the source files are prepared locally for upload/push; publishing must be verified after the repository receives them.
+```sh
+node --check api/gateway.js
+node --check bluepeak-access-ui.js
+node --check admin-portal.js
+node test-gateway-auth.js
+node test-pattern-scanner.js
+node test-asset-scanner.js
+node test-v1.js
+```
+
+Deployment and browser verification are separate from these local checks. A passing local test is not evidence that production is fixed.

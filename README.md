@@ -1,40 +1,93 @@
 # BluePeak Scalp Terminal
 
-Original BluePeakDesign market-data dashboard. Independent, client-side and read-only for live data; all trade tickets below are simulation records only.
+BluePeak is a read-only crypto-market terminal with an 18-asset watchlist, charts, public market monitoring, historical pattern detection, and a V1 trend-continuation scanner. It does not place trades, handle funds, predict prices, or give trading advice.
 
-## Run locally
+The deployed system has two protected areas:
 
-```bash
-python3 -m http.server 4173 --bind 0.0.0.0
+- **Customer terminal:** approved customers sign in with an issued username and password.
+- **Administrator portal:** a separately provisioned administrator signs in at `/admin` using username, password, and TOTP authenticator verification (AAL2).
+
+## Current deployment warning
+
+The local source package contains the updated server-side routing and customer/admin separation, but it has **not yet been deployed to Vercel**. Live HTTP checks on 2026-11-12 found `/` and `/admin` return login pages; signed-out HTML requests to `/app`, `/index.html`, and `/pattern-scanner.js` redirect to `/`; `/admin/dashboard`, `/admin/users`, and `/app/admin` still return 404 in production. Do not treat the live admin portal as fixed until the updated package is deployed and real-browser tests pass.
+
+The latest local routing correction is documented in `PROJECT_STATUS.md` and `SECURE-ACCESS-REWRITE.md`.
+
+## Routes in the updated source
+
+- `/` — signed-out customer login/landing page; an approved buyer is redirected to `/app`, an AAL2 admin to `/admin/dashboard`.
+- `/app` — protected customer terminal and scanner.
+- `/admin` — dedicated administrator sign-in and first-owner/MFA setup when signed out; an authenticated buyer is redirected to `/app`, while an AAL2 administrator is redirected to `/admin/dashboard`.
+- `/admin/dashboard` — protected admin dashboard.
+- `/admin/users` — protected account management.
+- `/app/admin` — compatibility redirect to `/admin/users` for an authorized admin, otherwise to `/admin`.
+
+Every Vercel request is routed through `api/gateway.js`. The gateway serves protected HTML, scripts, and assets only after server-side Supabase session and role checks. Admin pages and `/api/admin` additionally require the administrator role and AAL2. Browser auth tokens are Secure, HttpOnly cookies. Customers can sign out from the terminal's global top bar; administrators can sign out inside the dedicated Admin Portal. Supabase Auth stores password hashes; passwords are not retrievable. Admin resets generate a new one-time password and revoke the user's BluePeak sessions.
+
+## Local development
+
+Requirements: Node.js 20 or later, internet access, and the Vercel CLI invoked through `npx`. No third-party NPM runtime packages are required by `package.json`.
+
+1. Clone this repository, or open the project folder.
+2. Sign in to Vercel and link the existing project (once per local checkout):
+
+   ```sh
+   npx --yes vercel login
+   npx --yes vercel link
+   ```
+
+   Select the existing `bluepeak-terminal` project. Do not create a replacement project.
+3. Run the Vercel development server:
+
+   ```sh
+   npx --yes vercel dev
+   ```
+
+   Use the local URL printed by the CLI. A plain `python -m http.server` is not sufficient because it bypasses the server-side gateway.
+
+## Tests
+
+Run the gateway authorization regression and existing synthetic scanner tests from the project root:
+
+```sh
+node test-gateway-auth.js
+node test-pattern-scanner.js
+node test-asset-scanner.js
+node test-v1.js
 ```
 
-Open `http://localhost:4173` (or the provided live preview). No package installation or API keys are required.
+The gateway, customer access UI, and admin UI can be syntax-checked with:
 
-## Features
+```sh
+node --check api/gateway.js
+node --check bluepeak-access-ui.js
+node --check admin-portal.js
+```
 
-- Binance public WebSocket ticker, kline and partial-depth feeds; automatic reconnects and REST/demo fallbacks.
-- Responsive watchlist, expanded desktop chart with volume, native/fallback fullscreen, Ctrl/Cmd + wheel zoom, mouse-drag and two-finger touch pan/zoom, 12px page-scroll safe zones, on-demand older candles and reset-view control.
-- Session-only horizontal/trendline annotations, SMA/EMA/RSI/MACD overlays, and normalized comparison with another asset. RSI/MACD describe historical price action; they are not forecasts.
-- Client-side threshold and rolling five-minute move alerts, with optional browser notifications.
-- An always-visible Large Trades panel, aligned to the dashboard grid, plus a detailed session log. Binance public per-symbol `aggTrade` streams share one combined WebSocket with ticker, kline and depth data (currently 38 streams, or 39 with chart comparison, below the ~200-stream connection limit). The display defaults to $250K+, buffers recent executed trades from $50K+ so the minimum selector immediately re-filters session history, labels taker BUY/SELL side, and keeps up to 75 entries; higher-tier notices are optional. The tab must stay open. The combined socket reconnects and resubscribes after disconnects.
-- Optional, manually populated Ethereum address activity using Blockscout’s public API. User-defined labels only; no wallet addresses are preloaded or ownership inferred. The view currently covers direct ETH value and verified PAXG token transfers only, not other watchlist assets/chains or exchange order flow.
-- A client-side market monitor that scans all 18 watchlist assets every 5, 10 or 15 minutes, produces plain-English summaries, and notifies only on >2% moves within 15 minutes, RSI threshold crossings, or >2× volume spikes. Uses a Web Worker timer where available, foreground catch-up scans, explicit background status, optional browser notifications plus in-page notices; the tab must remain open.
-- Monitor requests are batched at low concurrency and honor Binance `Retry-After`/429 responses with visible backoff.
-- A paper-trading simulator that records hypothetical fills at observed prices and calculates simulated realized/unrealized P&L. It never sends orders or uses real funds.
-- Mouse/keyboard OHLC crosshair, client-side PNG export, `?` shortcuts panel, relative data freshness, and settings for timeframe, precision, sound and system-matched theme.
-- Individual inline SVG coin marks and BluePeak monogram; locally hosted Inter and JetBrains Mono variable fonts (with OFL license files), plus `favicon.svg` and the 1200 × 630 `og-preview.png`.
-- Skeleton loading, update flashes, dismissible connection notices, focus states and reduced-motion support.
+Local mocked routing checks and the results/pending items are recorded in `PROJECT_STATUS.md`. They are not a substitute for live incognito and authenticated browser tests.
 
-Theme/settings and indicator choices use local browser storage. Alerts, paper-trade logs, drawings, the Large Trades log, and manually added wallet labels/addresses are kept only for the current browser session. On-chain refreshes send a user-entered public address directly to Blockscout; no server-side state or account data is used.
+## Environment and secrets
 
-## Verified watchlist pairs
+The gateway requires `SUPABASE_ANON_KEY` at runtime to call Supabase Auth and Edge Functions. It is configured in the linked Vercel project for production, preview, and development. For a local linked checkout, Vercel CLI can populate an ignored `.env.local` with `npx --yes vercel env pull .env.local`; never commit that file. `.env.example` lists the variable name and optional gateway overrides only. The anon/publishable key is designed to be public; database RLS and server-side authorization must remain correctly enforced. Supabase service-role credentials belong only in Supabase's server-side function secrets. Never place service-role credentials, passwords, access tokens, or actual `.env` files in this repository or browser code. `.gitignore` excludes local environment files and Vercel project metadata. Do not disable or weaken database RLS as a routing workaround.
 
-On 2026-11-11, the nine added USDT spot symbols (SHIBUSDT, PEPEUSDT, LINKUSDT, SUIUSDT, TRXUSDT, DOTUSDT, NEARUSDT, APTUSDT, and ARBUSDT) were checked against Binance public Spot Exchange Information via `data-api.binance.vision`; each returned `TRADING`. TONUSDT returned `BREAK`, so it was not added. PAXGUSDT (PAXG (tokenized gold)) also returned `TRADING` in Binance public Spot Exchange Information; the expanded watchlist has 18 active pairs. The PAXG feed represents its own Binance spot market, not COMEX gold futures. No silver trade feed is included.
+Supabase Edge Functions used by the gateway are `bluepeak-access`, `secure-bluepeak-auth`, `secure-bluepeak-admin`, and `secure-bluepeak-bootstrap`. Supabase Auth owns password hashing and MFA.
 
-## Safety scope
+## Production deployment
 
-No login/signup, accounts, backend, or personal-data collection by BluePeak. Manually entered public wallet addresses stay in the browser session and are sent directly to Blockscout when added or refreshed. No wallet connection, order execution, deposits or withdrawals. Live order-book, chart and large-trade panels are view-only. Large Trades displays real, already-executed public aggregate trades; it does not show predictions, insider information, or trade recommendations. Alerts are user-defined threshold notifications, not predictions or buy/sell recommendations.
+From the project root, with the correct Vercel account signed in and the project linked:
 
-## Deployment note
+```sh
+npx --yes vercel deploy . --prod --yes
+```
 
-`index.html` references the Open Graph image as `/og-preview.png`. Once a production domain is selected, set `og:image` and `twitter:image` to the full absolute URL for reliable retrieval by social crawlers.
+After Vercel reports READY/PROMOTED, test the production routes, server-side denials, admin/customer separation, refresh, navigation, and sign-out. A successful upload alone is not proof that auth works. See `PLAN.md` and `SECURE-ACCESS-REWRITE.md`.
+
+## Market and safety notes
+
+- Market data is public Binance data; wallet address lookups use Blockscout. No wallet connection or signing is used.
+- User-added wallet addresses/labels, alerts, drawings, and paper trades are browser-session data; addresses are sent to Blockscout when queried.
+- Pattern output is historical detection, not a trading signal or guarantee. V1 is trend continuation, not reversal/bottom detection; all stages must pass in order.
+- Listing age is only a proxy based on the earliest returned daily candle (not an official exchange listing date). Minimum age and quote volume are configurable; defaults are 30 days and $5M USDT.
+- Context warnings are informational and do not block an otherwise qualifying setup. Reference levels are informational only; no order is executed.
+- Backtest defaults: 1,000 completed 1h candles, next 24 completed hourly candles, +1 ATR before −1 ATR, and same-candle double touches counted unfavorably.
+- Required disclosures: “Pattern match based on historical price action — not a trading signal or guarantee.” “Historical backtest result, not a prediction of future performance.” “Reference levels only — not advice, nothing is executed on your behalf.”
