@@ -1,46 +1,54 @@
-# Supabase project source
+# Supabase project source and release notes
 
-This directory contains the four Edge Function sources, Supabase CLI project configuration, four migrations previously recorded in the linked project, and the username/email migration `20261112124634`, which is now applied. The SQL files contain schema only, not user records or credentials.
+This directory contains four Supabase Edge Function sources, CLI configuration, and schema migrations. SQL files contain schema only—not user rows, passwords, or credentials. The feature archive includes the new safe user-management migration, which has **not** yet been applied.
 
 ## Edge Functions
 
-- `bluepeak-access` — access/session status and revocation plus legacy protected operations.
-- `secure-bluepeak-auth` — local source supports buyer username-or-email/password sign-in, admin TOTP verification, session limits, and legacy admin account operations. The deployed function has not been updated.
-- `secure-bluepeak-admin` — server-verified admin user-management operations.
+- `bluepeak-access` — session/status enforcement and legacy protected operations.
+- `secure-bluepeak-auth` — username/email login, admin TOTP verification, session limits, and login/account controls.
+- `secure-bluepeak-admin` — AAL2-protected administrator operations; updated source supports disable, enable, soft-delete, owner-only permanent purge, and existing account operations.
+- `secure-bluepeak-admin/user-management-rules.mjs` — colocated status-transition/confirmation/protected-target rules imported by the admin function.
 - `secure-bluepeak-bootstrap` — one-time first-owner bootstrap.
 
-The functions are configured with `verify_jwt = false` because they expose both sign-in and protected actions. Each function must retain its own server-side JWT, profile-role, active-session, and (for admin operations) AAL2 checks. Do not remove or bypass those checks.
+`verify_jwt = false` is intentional because some functions handle sign-in. Each function performs its own server-side Auth verification. Admin user operations independently require a valid Auth user, approved admin profile, `aal2` claim, and unrevoked `bp_active_sessions` row. Preserve these checks.
 
 ## Migrations
 
-The original project migration versions are retained in `migrations/`:
+The existing project has the original `bp_*` schema and email identifier migration. The archive adds:
 
-1. `20261112063225_create_bluepeak_access_tables.sql`
-2. `20261112063503_add_coarse_login_location.sql`
-3. `20261112063826_add_access_control_settings.sql`
-4. `20261112064007_remove_duplicate_pending_index.sql`
+- `migrations/20261112150000_add_safe_user_management_status.sql` — adds soft-delete metadata and permits profile status `deleted`. It does not remove data, disable RLS, or add client policies.
 
-They create the six `bp_*` tables, enable RLS, restrict direct table access to `service_role`, create indexes/constraints, and add coarse location/session settings. The migrations do not create RLS policies. Do not weaken RLS or grant direct client access as a routing workaround.
-
-### Applied email-identifier migration
-
-`migrations/20261112124634_allow_email_identifiers.sql` expands the `bp_profiles.username` constraint and adds case-insensitive uniqueness. A preflight found zero case-insensitive duplicate profile identifiers. After application, two profiles remained and zero identifiers violated the new constraint. It does not alter the `bp_access_requests` username check.
-
-## Local CLI workflow
-
-After installing the Supabase CLI and authenticating locally (never put credentials in this archive or chat):
+Check migration history before applying. The project previously had the earlier migrations recorded/applied; this newest migration is pending. With the correct project linked:
 
 ```sh
 supabase link --project-ref ivpzznjunvxdfnpzggxp
 supabase migration list
-supabase functions deploy bluepeak-access
-supabase functions deploy secure-bluepeak-auth
-supabase functions deploy secure-bluepeak-admin
-supabase functions deploy secure-bluepeak-bootstrap
+supabase db push
+supabase migration list
 ```
 
-Before applying migrations to any existing database, compare migration history first. The current linked project was previously confirmed to have the four original listed versions applied. The additional email-identifier migration is applied as version `20261112124634`. Keep `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and especially `SUPABASE_SERVICE_ROLE_KEY` in Supabase's server-side function secrets. Never commit actual secret values or `.env` files.
+Review the proposed migration before confirmation. It only adds nullable columns/checks/index; it is designed to preserve existing profiles.
 
-## Auth dashboard settings
+## User-state semantics
 
-Supabase Auth is configured with email/password authentication, public signup disabled, and TOTP MFA enabled. These hosted Auth settings are not represented by a local SQL migration; verify them in the Supabase dashboard when setting up a different project.
+- `approved`: active; custom login/status checks permit access only when the session record is active.
+- `revoked`: Disabled. Existing app sessions are revoked, profile/status checks deny new and existing requests, and the Auth account is banned. Enabling restores the same account/password but not prior sessions.
+- `deleted`: soft-deleted and denied; existing profile/data/audit references remain. A separately protected permanent purge is available only to the designated `owner` profile after exact confirmation.
+
+Soft deletion is the default Delete User action. Permanent purge uses `auth.admin.deleteUser` only after server-side owner/AAL2/session/status/confirmation checks. Existing FK relationships cascade profile/application session rows, while nullable historical references are set to NULL. Audit metadata records the purged identifier.
+
+RLS remains enabled, with direct public/authenticated table access still revoked. All mutations use the service-role client only inside the Edge Function. Do not put `SUPABASE_SERVICE_ROLE_KEY` in GitHub, Vercel client source, this archive, or chat.
+
+## Deploy updated Edge Function
+
+After the migration is applied, deploy the function folder—not just the single `index.ts`, so the helper file is bundled:
+
+```sh
+supabase functions deploy secure-bluepeak-admin
+```
+
+Confirm the existing Supabase function secrets are present in the Supabase dashboard. Do not create or expose secrets in project source. Verify deployment status after publish.
+
+## Auth settings
+
+The existing project uses email/password Auth, disabled public signup, and TOTP MFA. These hosted Auth settings are not changed by the new migration. Keep those settings and service-role credentials private.

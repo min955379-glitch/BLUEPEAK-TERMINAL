@@ -1,6 +1,8 @@
 # Username/email and site-link audit
 
-**Scope:** local source in this package plus verified production observations. The Supabase migration was applied; Supabase reports `secure-bluepeak-admin` v2 active, but `secure-bluepeak-auth` remains v1 and its update is unconfirmed. No new Vercel release or authenticated production browser test has occurred.
+> Historical audit snapshot. For current release and deployment status, see `PROJECT_STATUS.md`. The new user-management update described in the README is prepared locally and still requires its migration/Edge Function release.
+
+**Scope:** this document records earlier local-source and production observations. Do not treat its deployment identifiers as current.
 
 ## Identifier flow
 

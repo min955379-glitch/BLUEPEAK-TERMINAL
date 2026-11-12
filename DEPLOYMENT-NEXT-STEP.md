@@ -1,19 +1,42 @@
 # Deployment and synchronization next steps
 
-## Vercel
+## Current source/deployment status
 
-The project is linked to the existing `bluepeak-terminal` Vercel project. The latest admin routing and username/email identifier changes are in this package but have not been deployed. The matching Supabase schema migration (`supabase/migrations/20261112124634_allow_email_identifiers.sql`) has been applied through the Supabase migration tool. Supabase currently reports `secure-bluepeak-admin` version 2 active, while `secure-bluepeak-auth` remains version 1; the auth update is not confirmed. The Vercel gateway/source still needs deployment. Once signed in to Vercel CLI on the deployment computer, run from the project root:
+The repository base for the new user-management archive is remote `main` commit `2f6cdd5`. The new enable/disable/soft-delete/owner-purge files are prepared for manual upload; this agent will not push. Existing Vercel production and Supabase `secure-bluepeak-admin` do not yet include these new actions. The schema migration below is pending and was not applied during this work.
+
+## 1. Upload the source
+
+Extract `BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` and upload its repository-root contents to the existing GitHub repository, preserving file paths. Do not upload `.git`, `.env`, service-role secrets, passwords, access tokens, or local deployment metadata. Verify the intended `main` commit contains the files before continuing.
+
+## 2. Apply the additive Supabase migration
+
+Against the existing project only, first inspect migration history. Then apply:
+
+`supabase/migrations/20261112150000_add_safe_user_management_status.sql`
+
+This migration adds soft-delete metadata and allows the `deleted` profile status; it does not delete current user data or alter RLS. Do not run `supabase db push` against an unverified project.
+
+## 3. Deploy the Supabase admin function
+
+The updated Edge Function imports a local helper file; deploy from the repository with Supabase CLI so both files are bundled:
 
 ```sh
-npx --yes vercel deploy . --prod --yes
+supabase link --project-ref ivpzznjunvxdfnpzggxp
+supabase migration list
+supabase db push
+supabase functions deploy secure-bluepeak-admin
 ```
 
-Confirm READY/PROMOTED, then test `/`, `/login`, `/admin`, `/admin/dashboard`, `/admin/users`, `/app`, and `/app/admin` with signed-out, customer, and administrator sessions; verify username and email create/login using controlled test accounts. Current live checks show `/login` returns 404 in the current production source; signed-out customer/admin access guards otherwise return their expected redirects. Do not tell users the portal is fixed until the new version is deployed and real-browser checks pass.
+Confirm the existing `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` Supabase function secrets are still configured. Never paste service-role values into GitHub, Vercel client code, or chat.
 
-## GitHub
+## 4. Wait for Vercel
 
-The repository is `https://github.com/min955379-glitch/BLUEPEAK-TERMINAL`, branch `main`. The last observed remote commit is `9583b209f29698c8fa65ba8843ea5ab406a54c69`. GitHub connector support is unavailable in this workspace; no commit or push has been made. Use an authenticated GitHub CLI or Git for Windows login locally, review `git status` and the diff, then push the reviewed changes. Do not share a token or password in chat.
+Wait until the Git-linked Vercel production deployment for the uploaded commit is READY/PROMOTED. Verify `/admin`, `/admin/dashboard`, and `/admin/users` before using account controls.
+
+## 5. Private acceptance checks
+
+Use an authorized AAL2 admin and disposable buyer account. Verify disable, denied login/API/existing session, enable with existing password and preserved profile data, soft delete and Disabled/Deleted statuses, owner-only purge, FK cleanup, audit records, customer-denial of admin APIs, and owner/self/last-admin protection. Check mobile/desktop layout and customer scanner afterwards. Do not share credentials or TOTP codes in chat.
 
 ## Secrets
 
-The gateway requires `SUPABASE_ANON_KEY`; Vercel currently has it configured as an encrypted variable for production, preview, and development. It is the Supabase anon/publishable key, not a service-role credential. For local linked development, pull environment variables with `npx --yes vercel env pull .env.local`; `.gitignore` excludes `.env.local`. `.env.example` contains only variable names and empty values. Keep service-role credentials in Supabase Edge Function secrets, never in GitHub or browser code.
+The Vercel gateway uses `SUPABASE_ANON_KEY` server-side. Supabase `SERVICE_ROLE_KEY` remains only in Edge Function secrets. No secret values belong in the archive.

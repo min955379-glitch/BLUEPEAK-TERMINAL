@@ -1,5 +1,6 @@
 const $ = selector => document.querySelector(selector);
 const notice = $('#notice');
+let canPurgeDeletedUsers = false;
 
 async function api(action, extra = {}) {
   const controller = new AbortController();
@@ -35,11 +36,40 @@ function date(value) {
   return Number.isNaN(+parsed) ? '—' : parsed.toLocaleString();
 }
 
+function statusLabel(user) {
+  if (user.access_status === 'deleted' || user.deleted_at) return 'Deleted';
+  if (user.access_status === 'approved' && !user.revoked_at) return 'Active';
+  if (user.access_status === 'revoked' || user.revoked_at) return 'Disabled';
+  return 'Pending';
+}
+
+function statusClass(label) {
+  return ({ Active: 'status-active', Disabled: 'status-disabled', Deleted: 'status-deleted', Pending: 'status-pending' })[label] || 'status-protected';
+}
+
+function makeAction(label, className, handler) {
+  const button = document.createElement('button');
+  button.className = `action ${className || ''}`.trim();
+  button.type = 'button';
+  button.textContent = label;
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await handler();
+    } catch (error) {
+      if (notice) notice.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
 function addLoadError(tbody, error) {
   tbody.replaceChildren();
   const row = document.createElement('tr');
   const cell = document.createElement('td');
-  cell.colSpan = 5;
+  cell.colSpan = 6;
   cell.setAttribute('role', 'status');
   cell.append(document.createTextNode(`Could not load users: ${error.message} `));
   const retry = document.createElement('button');
@@ -58,19 +88,20 @@ async function loadUsers() {
   tbody.replaceChildren();
   const loadingRow = document.createElement('tr');
   const loadingCell = document.createElement('td');
-  loadingCell.colSpan = 5;
+  loadingCell.colSpan = 6;
   loadingCell.textContent = 'Loading users…';
   loadingRow.append(loadingCell);
   tbody.append(loadingRow);
 
   try {
     const data = await api('list-users');
+    canPurgeDeletedUsers = data.can_purge_deleted_users === true;
     const users = Array.isArray(data.users) ? data.users : [];
     tbody.replaceChildren();
     if (!users.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 5;
+      cell.colSpan = 6;
       cell.textContent = 'No accounts found.';
       row.append(cell);
       tbody.append(row);
@@ -79,46 +110,89 @@ async function loadUsers() {
 
     for (const user of users) {
       const row = document.createElement('tr');
-      for (const value of [user.username || '—', user.role || '—', user.access_status || '—', date(user.created_at)]) {
-        const cell = document.createElement('td');
-        cell.textContent = value;
-        row.append(cell);
-      }
-      const actions = document.createElement('td');
-      const wrapper = document.createElement('div');
-      wrapper.className = 'row-actions';
-      if (user.role === 'buyer' && user.access_status === 'approved') {
-        const reset = document.createElement('button');
-        reset.className = 'action';
-        reset.textContent = 'Reset password';
-        reset.onclick = async () => {
-          if (!confirm(`Generate a new password for ${user.username}? Existing BluePeak sessions will be revoked.`)) return;
-          try {
-            const result = await api('reset-user-password', { username: user.username });
-            notice.textContent = `One-time password for ${result.username}: ${result.temporary_password}\nCopy it now and share securely. It will not be shown again.`;
-          } catch (error) {
-            notice.textContent = error.message;
-          }
-        };
-        const revoke = document.createElement('button');
-        revoke.className = 'action danger';
-        revoke.textContent = 'Revoke access';
-        revoke.onclick = async () => {
-          if (!confirm(`Revoke BluePeak access for ${user.username}?`)) return;
-          try {
-            await api('revoke-user', { username: user.username });
-            notice.textContent = `Access revoked for ${user.username}.`;
+      const nameCell = document.createElement('td');
+      nameCell.className = 'user-name';
+      nameCell.textContent = user.username || '—';
+      const emailCell = document.createElement('td');
+      emailCell.className = 'email';
+      emailCell.textContent = user.email || '—';
+      const roleCell = document.createElement('td');
+      roleCell.textContent = user.role || '—';
+      const statusCell = document.createElement('td');
+      const label = statusLabel(user);
+      const pill = document.createElement('span');
+      pill.className = `status-pill ${statusClass(label)}`;
+      pill.textContent = label;
+      statusCell.append(pill);
+      const dateCell = document.createElement('td');
+      dateCell.textContent = date(user.created_at);
+      const actionsCell = document.createElement('td');
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+
+      const isBuyer = user.role === 'buyer';
+      const ownerNamed = user.username === 'owner';
+      if (isBuyer && !ownerNamed && label !== 'Deleted') {
+        actions.append(makeAction('Reset password', '', async () => {
+          if (!confirm(`Reset the password for ${user.username} (${user.email || 'email unavailable'})? Existing BluePeak sessions will be revoked.`)) return;
+          const result = await api('reset-user-password', { username: user.username });
+          notice.textContent = `One-time password for ${result.username}: ${result.temporary_password}\nCopy it now and share it securely; it will not be shown again.`;
+        }));
+
+        if (label === 'Active') {
+          actions.append(makeAction('Disable access', 'disable', async () => {
+            if (!confirm(`Disable ${user.username} (${user.email || 'email unavailable'})? Their current sessions will be revoked. Their account and data will be kept, and access can be restored later.`)) return;
+            const result = await api('disable-user', { username: user.username });
+            notice.textContent = `Access disabled for ${user.username}.${result.warning ? ` ${result.warning}` : ''}`;
             await loadUsers();
-          } catch (error) {
-            notice.textContent = error.message;
+          }));
+        } else if (label === 'Disabled' || label === 'Pending') {
+          actions.append(makeAction('Enable access', 'enable', async () => {
+            const result = await api('enable-user', { username: user.username });
+            notice.textContent = `Access restored for ${user.username}. They can sign in with their existing password.${result.warning ? ` ${result.warning}` : ''}`;
+            await loadUsers();
+          }));
+        } else {
+          const pending = document.createElement('span');
+          pending.className = 'status-pill status-pending';
+          pending.textContent = 'Awaiting admin review';
+          actions.append(pending);
+        }
+
+        actions.append(makeAction('Delete User', 'danger', async () => {
+          const email = user.email || 'email unavailable';
+          if (!confirm(`Soft-delete this account?\n\nName: ${user.username}\nEmail: ${email}\n\nThe Auth account will be blocked and sessions revoked. Profile and related records will be retained. Only the designated owner can permanently purge a deleted account.`)) return;
+          const confirmation = prompt(`Type DELETE ${user.username} exactly to confirm.`);
+          if (confirmation !== `DELETE ${user.username}`) {
+            notice.textContent = 'Deletion cancelled: the confirmation text did not match.';
+            return;
           }
-        };
-        wrapper.append(reset, revoke);
+          const result = await api('delete-user', { username: user.username, confirmation });
+          notice.textContent = `Deleted ${user.username}; its records are retained in soft-deleted status.${result.warning ? ` ${result.warning}` : ''}`;
+          await loadUsers();
+        }));
+      } else if (isBuyer && label === 'Deleted' && canPurgeDeletedUsers && !ownerNamed) {
+        actions.append(makeAction('Permanently purge', 'purge', async () => {
+          const email = user.email || 'email unavailable';
+          if (!confirm(`Permanently purge ${user.username} (${email})? This removes the Auth identity, profile, and cascading session records. Historical audit/login records are retained with user references anonymized where the schema requires it. This cannot be undone.`)) return;
+          const confirmation = prompt(`Type PURGE ${user.username} exactly to permanently delete this user.`);
+          if (confirmation !== `PURGE ${user.username}`) {
+            notice.textContent = 'Permanent deletion cancelled: the confirmation text did not match.';
+            return;
+          }
+          const result = await api('purge-deleted-user', { username: user.username, confirmation });
+          notice.textContent = `Permanently purged ${user.username}.${result.warning ? ` ${result.warning}` : ''}`;
+          await loadUsers();
+        }));
       } else {
-        wrapper.textContent = '—';
+        const protectedLabel = document.createElement('span');
+        protectedLabel.className = 'status-pill status-protected';
+        protectedLabel.textContent = ownerNamed || user.role === 'admin' ? 'Protected account' : '—';
+        actions.append(protectedLabel);
       }
-      actions.append(wrapper);
-      row.append(actions);
+
+      actionsCell.append(actions);
+      row.append(nameCell, emailCell, roleCell, statusCell, dateCell, actionsCell);
       tbody.append(row);
     }
   } catch (error) {
@@ -126,8 +200,6 @@ async function loadUsers() {
   }
 }
 
-// The users page needs an explicit initial request; otherwise its static
-// "Loading…" placeholder remains forever until a create/revoke action occurs.
 if ($('#users')) loadUsers();
 
 const form = $('#create-form');
@@ -152,7 +224,7 @@ if (form) form.addEventListener('submit', async event => {
 const count = $('#user-count');
 if (count) {
   api('list-users')
-    .then(data => { count.textContent = String((data.users || []).filter(user => user.role === 'buyer').length); })
+    .then(data => { count.textContent = String((data.users || []).filter(user => user.role === 'buyer' && user.access_status === 'approved' && !user.revoked_at && !user.deleted_at).length); })
     .catch(error => { if (notice) notice.textContent = error.message; });
 }
 

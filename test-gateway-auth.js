@@ -122,6 +122,15 @@ function location(res) { return res.headers.location; }
   res = await request('/app', { cookie: admin });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/admin/dashboard');
   assert.equal((await request('/api/admin', { method: 'POST', cookie: admin, body: { action: 'list-users' } })).statusCode, 200);
+  for (const action of ['disable-user', 'enable-user', 'delete-user', 'purge-deleted-user']) {
+    res = await request('/api/admin', { method: 'POST', cookie: admin, body: { action, username: 'buyer', confirmation: `DELETE buyer` } });
+    assert.equal(res.statusCode, 200, `AAL2 admins must reach the server-side ${action} handler`);
+    assert.ok(events.some(event => event.url.endsWith('/functions/v1/secure-bluepeak-admin') && event.action === action), `${action} must be delegated to secure-bluepeak-admin`);
+  }
+  for (const action of ['disable-user', 'enable-user', 'delete-user', 'purge-deleted-user']) {
+    res = await request('/api/admin', { method: 'POST', cookie: buyer, body: { action, username: 'someone', confirmation: 'DELETE someone' } });
+    assert.equal(res.statusCode, 403, `customers must not call ${action}`);
+  }
   res = await request('/app/admin', { cookie: admin });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/admin/users');
   assert.equal((await request('/pattern-scanner.js', { cookie: admin })).statusCode, 403);
@@ -181,7 +190,7 @@ function location(res) { return res.headers.location; }
   assert.match(authFn, /identifierOk\(username\)/);
   assert.match(authFn, /action==='revoke-user'/);
   assert.match(authFn, /emailOk\(username\)\?username:emailFor\(username\)/);
-  assert.match(adminFn, /emailOk\(username\)\?username:/);
+  assert.match(adminFn, /emailOk\(username\) \? username : emailFor\(username\)/);
   assert.match(migration, /bp_profiles_username_identifier_check/);
   assert.match(migration, /bp_profiles_username_lower_idx/);
   const adminLogin = (await request('/admin')).body;
@@ -193,7 +202,9 @@ function location(res) { return res.headers.location; }
   assert.match(portal, /\/api\/logout/);
   assert.match(portal, /create-user/);
   assert.match(portal, /reset-user-password/);
-  assert.match(portal, /revoke-user/);
+  assert.match(portal, /disable-user/);
+  assert.match(portal, /enable-user/);
+  assert.match(portal, /delete-user/);
   assert.match(portal, /if \(\$\('#users'\)\) loadUsers\(\)/, 'admin users list must load on initial page entry');
   assert.match(portal, /request timed out/i, 'admin API must time out with a recoverable message');
   assert.match(portal, /retry\.textContent = 'Retry'/, 'failed user list should offer retry');

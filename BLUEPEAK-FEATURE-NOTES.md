@@ -1,6 +1,8 @@
 # BluePeak scanner and access-control implementation notes
 
-Scanner logic is implemented in the source package. The latest admin-routing correction is local and not live yet; GitHub sync and the production release remain pending. See `PROJECT_STATUS.md` for the authoritative status.
+> The following scanner/security notes are retained as a detailed design snapshot. For the current deployment and release state, use `PROJECT_STATUS.md`. The current Admin Users update adds server-enforced disable/enable, soft delete, and owner-only permanent purge; it is not part of the previously deployed baseline until the archive's migration and Edge Function are released.
+
+Scanner logic is implemented in the source package.
 
 ## Scanner rules implemented in the local analysis module
 
