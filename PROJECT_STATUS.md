@@ -15,6 +15,7 @@ The local deployment package contains the server-side access gateway, separate c
 - Local gateway authorization regression tests pass for signed-out route guards, customer redirects/denials, admin MFA/AAL2 route guards, unknown-role fail-closed behavior, silent access-token refresh, expired/revoked sessions, logout cookie clearing, token-cookie handling, and admin API authorization.
 - Removed the `Admin panel` and `Sign out this device` controls and their duplicate customer-interface admin handler from `bluepeak-access-ui.js`; customer logout is available in the terminal's global top bar, and the dedicated Admin Portal keeps its navigation/logout controls. Both use `/api/logout`.
 - Supabase Auth currently has public signup disabled, TOTP enabled, and email/password authentication enabled. All six `bp_*` public tables have RLS enabled; no table policies were returned by the catalog check. No database policy was changed.
+- Added the four migration SQL files recorded by the current Supabase project's migration ledger, plus `supabase/config.toml` and deployment notes. These are source files only; no migration was run against the live database.
 - README, ROADMAP, PLAN, and this status document are synchronized in the local project package. `.gitignore` and a secrets-free `.env.example` are included.
 
 ## 4. In Progress

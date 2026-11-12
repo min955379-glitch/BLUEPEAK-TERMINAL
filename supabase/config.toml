@@ -1,0 +1,13 @@
+project_id = "ivpzznjunvxdfnpzggxp"
+
+[functions.bluepeak-access]
+verify_jwt = false
+
+[functions.secure-bluepeak-auth]
+verify_jwt = false
+
+[functions.secure-bluepeak-admin]
+verify_jwt = false
+
+[functions.secure-bluepeak-bootstrap]
+verify_jwt = false

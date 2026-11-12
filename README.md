@@ -7,6 +7,10 @@ The deployed system has two protected areas:
 - **Customer terminal:** approved customers sign in with an issued username and password.
 - **Administrator portal:** a separately provisioned administrator signs in at `/admin` using username, password, and TOTP authenticator verification (AAL2).
 
+## Project source and dependencies
+
+This is a **vanilla HTML/CSS/JavaScript** project, not React or Next.js. `index.html` contains the terminal UI and styles; standalone JavaScript modules implement the scanner and access UI. `api/gateway.js` is the Vercel Node serverless gateway. The `supabase/` directory contains all four Edge Function sources, the Supabase CLI config, and the four applied SQL migrations. Images, icons, and locally hosted fonts are included. `package.json` declares Node.js 20+ and no NPM runtime dependencies, so no `package-lock.json` is needed; the Supabase Edge Function package import is version-pinned in source. See `SOURCE-INVENTORY.md` for the archive contents and excluded generated/secret files.
+
 ## Current deployment warning
 
 The local source package contains the updated server-side routing and customer/admin separation, but it has **not yet been deployed to Vercel**. Live HTTP checks on 2026-11-12 found `/` and `/admin` return login pages; signed-out HTML requests to `/app`, `/index.html`, and `/pattern-scanner.js` redirect to `/`; `/admin/dashboard`, `/admin/users`, and `/app/admin` still return 404 in production. Do not treat the live admin portal as fixed until the updated package is deployed and real-browser tests pass.
