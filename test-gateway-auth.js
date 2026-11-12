@@ -95,8 +95,10 @@ function location(res) { return res.headers.location; }
   assert.equal((await request('/app', { cookie: buyer })).statusCode, 200);
   res = await request('/login', { cookie: buyer });
   assert.equal(res.statusCode, 200); assert.match(res.body, /Username or email/);
+  // A buyer cookie must not send /admin away from the admin sign-in page. Keep
+  // protected admin resources customer-denied, but let a legitimate admin sign in.
   res = await request('/admin', { cookie: buyer });
-  assert.equal(res.statusCode, 302); assert.equal(location(res), '/app');
+  assert.equal(res.statusCode, 200); assert.match(res.body, /Administrator sign in/);
   res = await request('/admin/dashboard', { cookie: buyer });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/app');
   res = await request('/app/admin', { cookie: buyer });
