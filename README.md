@@ -4,26 +4,27 @@ BluePeak is a read-only crypto-market terminal with an 18-asset watchlist, chart
 
 The deployed system has two protected areas:
 
-- **Customer terminal:** approved customers sign in with an issued username and password.
+- **Customer terminal:** approved customers sign in with the exact username or email identifier and password issued to them.
 - **Administrator portal:** a separately provisioned administrator signs in at `/admin` using username, password, and TOTP authenticator verification (AAL2).
 
 ## Project source and dependencies
 
-This is a **vanilla HTML/CSS/JavaScript** project, not React or Next.js. `index.html` contains the terminal UI and styles; standalone JavaScript modules implement the scanner and access UI. `api/gateway.js` is the Vercel Node serverless gateway. The `supabase/` directory contains all four Edge Function sources, the Supabase CLI config, and the four applied SQL migrations. Images, icons, and locally hosted fonts are included. `package.json` declares Node.js 20+ and no NPM runtime dependencies, so no `package-lock.json` is needed; the Supabase Edge Function package import is version-pinned in source. See `SOURCE-INVENTORY.md` for the archive contents and excluded generated/secret files.
+This is a **vanilla HTML/CSS/JavaScript** project, not React or Next.js. `index.html` contains the terminal UI and styles; standalone JavaScript modules implement the scanner and access UI. `api/gateway.js` is the Vercel Node serverless gateway. The `supabase/` directory contains all four Edge Function sources, the Supabase CLI config, the four original SQL migrations plus `20261112124634_allow_email_identifiers.sql`, which was applied successfully after a zero-duplicate preflight. Images, icons, and locally hosted fonts are included. `package.json` declares Node.js 20+ and no NPM runtime dependencies, so no `package-lock.json` is needed; the Supabase Edge Function package import is version-pinned in source. See `SOURCE-INVENTORY.md` for the archive contents and excluded generated/secret files.
 
 ## Current deployment warning
 
-The local source package contains the updated server-side routing and customer/admin separation, but it has **not yet been deployed to Vercel**. Live HTTP checks on 2026-11-12 found `/` and `/admin` return login pages; signed-out HTML requests to `/app`, `/index.html`, and `/pattern-scanner.js` redirect to `/`; `/admin/dashboard`, `/admin/users`, and `/app/admin` still return 404 in production. Do not treat the live admin portal as fixed until the updated package is deployed and real-browser tests pass.
+The local source package contains the updated server-side routing and customer/admin separation, plus mobile-compatible device-ID and viewport fixes, but it has **not yet been deployed to Vercel**. The last recorded signed-out HTTP checks found `/` and `/admin` return login pages; signed-out HTML requests to `/app`, `/index.html`, and `/pattern-scanner.js` redirect to `/`; `/admin/dashboard`, `/admin/users`, and `/app/admin` still return 404 in production. Do not treat the live admin portal as fixed until the updated package is deployed and real-browser tests pass.
 
-The latest local routing correction is documented in `PROJECT_STATUS.md` and `SECURE-ACCESS-REWRITE.md`.
+The latest local routing correction is documented in `PROJECT_STATUS.md` and `SECURE-ACCESS-REWRITE.md`. Username-or-email support is implemented in local source only. The schema migration was applied to Supabase; the matching Edge Function and Vercel source deployment is still pending.
 
 ## Routes in the updated source
 
-- `/` — signed-out customer login/landing page; an approved buyer is redirected to `/app`, an AAL2 admin to `/admin/dashboard`.
+- `/` — customer login/landing page when signed out; a valid buyer is redirected to `/app`, an AAL2 admin to `/admin/dashboard`.
+- `/login` — customer login screen directly, independent of an existing session; use this to return to buyer sign-in from the admin page without the session-aware `/` redirect.
 - `/app` — protected customer terminal and scanner.
 - `/admin` — dedicated administrator sign-in and first-owner/MFA setup when signed out; an authenticated buyer is redirected to `/app`, while an AAL2 administrator is redirected to `/admin/dashboard`.
 - `/admin/dashboard` — protected admin dashboard.
-- `/admin/users` — protected account management.
+- `/admin/users` — protected account management; create accounts with a username or email identifier and the users table displays the exact stored identifier.
 - `/app/admin` — compatibility redirect to `/admin/users` for an authorized admin, otherwise to `/admin`.
 
 Every Vercel request is routed through `api/gateway.js`. The gateway serves protected HTML, scripts, and assets only after server-side Supabase session and role checks. Admin pages and `/api/admin` additionally require the administrator role and AAL2. Browser auth tokens are Secure, HttpOnly cookies. Customers can sign out from the terminal's global top bar; administrators can sign out inside the dedicated Admin Portal. Supabase Auth stores password hashes; passwords are not retrievable. Admin resets generate a new one-time password and revoke the user's BluePeak sessions.
@@ -68,7 +69,7 @@ node --check bluepeak-access-ui.js
 node --check admin-portal.js
 ```
 
-Local mocked routing checks and the results/pending items are recorded in `PROJECT_STATUS.md`. They are not a substitute for live incognito and authenticated browser tests.
+Local mocked routing checks and the link/identifier destination matrix are recorded in `LINK-AND-IDENTIFIER-AUDIT.md`; current results/pending items are recorded in `PROJECT_STATUS.md`. They are not a substitute for live incognito and authenticated browser tests.
 
 ## Environment and secrets
 

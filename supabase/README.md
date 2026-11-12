@@ -1,11 +1,11 @@
 # Supabase project source
 
-This directory contains the four Edge Function sources, Supabase CLI project configuration, and the SQL migrations currently recorded in the linked Supabase project. The SQL files were recovered from the project's migration ledger on 2026-11-12; they contain schema only, not user records or credentials.
+This directory contains the four Edge Function sources, Supabase CLI project configuration, four migrations previously recorded in the linked project, and the username/email migration `20261112124634`, which is now applied. The SQL files contain schema only, not user records or credentials.
 
 ## Edge Functions
 
 - `bluepeak-access` — access/session status and revocation plus legacy protected operations.
-- `secure-bluepeak-auth` — username/password sign-in, admin TOTP verification, session limits, and admin account operations.
+- `secure-bluepeak-auth` — local source supports buyer username-or-email/password sign-in, admin TOTP verification, session limits, and legacy admin account operations. The deployed function has not been updated.
 - `secure-bluepeak-admin` — server-verified admin user-management operations.
 - `secure-bluepeak-bootstrap` — one-time first-owner bootstrap.
 
@@ -22,6 +22,10 @@ The original project migration versions are retained in `migrations/`:
 
 They create the six `bp_*` tables, enable RLS, restrict direct table access to `service_role`, create indexes/constraints, and add coarse location/session settings. The migrations do not create RLS policies. Do not weaken RLS or grant direct client access as a routing workaround.
 
+### Applied email-identifier migration
+
+`migrations/20261112124634_allow_email_identifiers.sql` expands the `bp_profiles.username` constraint and adds case-insensitive uniqueness. A preflight found zero case-insensitive duplicate profile identifiers. After application, two profiles remained and zero identifiers violated the new constraint. It does not alter the `bp_access_requests` username check.
+
 ## Local CLI workflow
 
 After installing the Supabase CLI and authenticating locally (never put credentials in this archive or chat):
@@ -35,7 +39,7 @@ supabase functions deploy secure-bluepeak-admin
 supabase functions deploy secure-bluepeak-bootstrap
 ```
 
-Before applying migrations to any existing database, compare migration history first. The current linked project already has all four listed versions applied. Keep `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and especially `SUPABASE_SERVICE_ROLE_KEY` in Supabase's server-side function secrets. Never commit actual secret values or `.env` files.
+Before applying migrations to any existing database, compare migration history first. The current linked project was previously confirmed to have the four original listed versions applied. The additional email-identifier migration is applied as version `20261112124634`. Keep `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and especially `SUPABASE_SERVICE_ROLE_KEY` in Supabase's server-side function secrets. Never commit actual secret values or `.env` files.
 
 ## Auth dashboard settings
 

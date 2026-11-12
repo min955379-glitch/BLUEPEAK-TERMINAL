@@ -67,6 +67,15 @@ function location(res) { return res.headers.location; }
   assert.match((await request('/')).body, /Welcome back/);
   assert.equal((await request('/admin')).statusCode, 200);
   assert.match((await request('/admin')).body, /Administrator sign in/);
+  const loginPage = await request('/login');
+  assert.equal(loginPage.statusCode, 200); assert.match(loginPage.body, /Username or email/);
+  assert.match(loginPage.body, /href=\"\/admin\"/);
+  assert.match(loginPage.body, /https:\/\/wa\.me\//);
+  assert.match(loginPage.body, /rel=\"noopener\"/);
+  assert.match(loginPage.body, /fetch\('\/api\/auth'/);
+  assert.match(loginPage.body, /username:f\.username\.value,password:f\.password\.value/);
+  assert.match(loginPage.body, /window\.crypto\.getRandomValues/);
+  assert.doesNotMatch(loginPage.body, /crypto\.randomUUID\(\)\.replaceAll/);
   let res = await request('/app');
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/');
   res = await request('/pattern-scanner.js');
@@ -84,6 +93,8 @@ function location(res) { return res.headers.location; }
   // Customer session: customer site works; admin login and all admin assets/APIs are denied.
   const buyer = 'bp_at=buyer-token; bp_rt=buyer-refresh';
   assert.equal((await request('/app', { cookie: buyer })).statusCode, 200);
+  res = await request('/login', { cookie: buyer });
+  assert.equal(res.statusCode, 200); assert.match(res.body, /Username or email/);
   res = await request('/admin', { cookie: buyer });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/app');
   res = await request('/admin/dashboard', { cookie: buyer });
@@ -99,6 +110,8 @@ function location(res) { return res.headers.location; }
   const admin = 'bp_at=admin-token; bp_rt=admin-refresh';
   res = await request('/', { cookie: admin });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/admin/dashboard');
+  res = await request('/login', { cookie: admin });
+  assert.equal(res.statusCode, 200); assert.match(res.body, /Username or email/);
   res = await request('/admin', { cookie: admin });
   assert.equal(res.statusCode, 302); assert.equal(location(res), '/admin/dashboard');
   res = await request('/admin/dashboard', { cookie: admin });
@@ -155,8 +168,26 @@ function location(res) { return res.headers.location; }
   const dashboard = fs.readFileSync(require.resolve('./admin-dashboard.html'), 'utf8');
   const users = fs.readFileSync(require.resolve('./admin-users.html'), 'utf8');
   const portal = fs.readFileSync(require.resolve('./admin-portal.js'), 'utf8');
+  const authFn = fs.readFileSync(require.resolve('./supabase/functions/secure-bluepeak-auth/index.ts'), 'utf8');
+  const adminFn = fs.readFileSync(require.resolve('./supabase/functions/secure-bluepeak-admin/index.ts'), 'utf8');
+  const migration = fs.readFileSync(require.resolve('./supabase/migrations/20261112124634_allow_email_identifiers.sql'), 'utf8');
   assert.match(dashboard, /id="signout"/); assert.match(users, /id="signout"/);
+  assert.match(users, /Username or email/);
+  assert.match(app, /min-width:320px/);
+  assert.match(app, /Mobile viewport containment/);
+  assert.match(authFn, /identifierOk\(username\)/);
+  assert.match(authFn, /action==='revoke-user'/);
+  assert.match(authFn, /emailOk\(username\)\?username:emailFor\(username\)/);
+  assert.match(adminFn, /emailOk\(username\)\?username:/);
+  assert.match(migration, /bp_profiles_username_identifier_check/);
+  assert.match(migration, /bp_profiles_username_lower_idx/);
+  const adminLogin = (await request('/admin')).body;
+  assert.match(adminLogin, /href="\/login">Return to user login/);
+  assert.match(dashboard, /href="\/admin\/users"/);
   assert.match(portal, /\/api\/logout/);
+  assert.match(portal, /create-user/);
+  assert.match(portal, /reset-user-password/);
+  assert.match(portal, /revoke-user/);
 
-  console.log('PASS test-gateway-auth: anonymous routes, role redirects, customer/admin denial, AAL2, silent session refresh, expired sessions, cookies/logout, login token handling, and button removal.');
+  console.log('PASS test-gateway-auth: signed-out/buyer/admin login routing, return-to-login path, customer/admin authorization, AAL2, silent session refresh, expired sessions, logout/cookies, identifier UI and backend wiring, and button preservation.');
 })().catch(err => { console.error(err); process.exitCode = 1; });

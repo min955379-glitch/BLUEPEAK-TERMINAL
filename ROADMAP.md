@@ -6,13 +6,15 @@ This is an ordered, non-date-based roadmap. Items are marked complete only when 
 
 - Responsive read-only terminal with 18-asset watchlist, public Binance market data, charts, order book, alerts, monitor, session-only paper trades, and optional manual Blockscout address activity.
 - Pattern scanner, asset adapter, explicit uptrend criteria, and V1 trend-continuation rules with 1,000 completed hourly candles and the 24-candle, ±1 ATR historical outcome convention.
-- Supabase Edge Functions for approved access, username/password login, TOTP-admin operations, first-owner bootstrap, password reset/revocation, and a small active-session cap.
-- Server-side Vercel gateway and login/landing flow in the deployment package; protected scripts/data are not sent to signed-out visitors in local gateway simulations.
+- Supabase Edge Functions for approved access, username-or-email buyer login in local source, TOTP-admin operations, first-owner bootstrap, password reset/revocation, and a small active-session cap. Production still runs its earlier username-only functions until the local code changes are released.
+- Server-side Vercel gateway and username-or-email login/landing flow in local source; protected scripts/data are not sent to signed-out visitors in local gateway simulations.
 - Separate admin dashboard and user-management pages with server-side role + AAL2 checks are implemented locally. The gateway now fails closed for unknown roles and routes authenticated customers away from `/admin`.
 - Removed the requested `Admin panel` and `Sign out this device` controls from the approved-customer scanner UI only; customer sign-out is in the main terminal top bar, and dedicated-admin navigation/logout and the shared server logout remain.
 - Gateway regression tests cover anonymous access, customer/admin routing, admin API denials, AAL2, expired sessions, secure cookies/logout, and token handling. Core scanner synthetic tests and JavaScript syntax checks pass.
 
-## In progress — release and source synchronization
+## In progress — identifier migration, release, and source synchronization
+
+- Email-identifier migration `20261112124634` is applied (zero duplicate groups; two profiles remain valid). Deploy both updated auth functions and gateway. Production remains on older source until release.
 
 1. Deploy the latest local package to the existing Vercel `bluepeak-terminal` production project. The deployment connector rejected an upload before creating a deployment, so production still runs the earlier routing implementation.
 2. Push the latest source and documentation to GitHub `main`. The GitHub connector is unsupported in this workspace and no GitHub CLI/authenticated local checkout is available here; the public repository was inspected and is still at `9583b209f29698c8fa65ba8843ea5ab406a54c69`.
