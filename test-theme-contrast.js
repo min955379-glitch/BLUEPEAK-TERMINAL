@@ -58,7 +58,42 @@ assert.match(index, /function plotPatternMarker\(/);
 assert.match(index, /window\.BluePeakTerminal=\{[^}]*plotPatternMarker/);
 assert.match(index, /type==='pattern-marker'/);
 assert.match(css, /clamp\(12px,4vw,16px\)/);
-assert.match(ui, /bp-select-list/);
+function orderbookRules(source){return (source.match(/[^{}]+\{[^{}]*\}/g)||[]).filter(rule=>/\.orderbook|\.depth|\.book-row|\.mid-price|\.spread/.test(rule.split('{')[0]))}
+for(const rule of [...orderbookRules(index),...orderbookRules(css)])assert.doesNotMatch(rule, /#D6AD55|#DEB65E|#F59E0B|#EAB308|214\s*,\s*173\s*,\s*85|222\s*,\s*182\s*,\s*94|245\s*,\s*158\s*,\s*11|var\(--(?:bp-accent-gold|gold)\)|yellow|amber/i, `yellow/gold order-book styling remains: ${rule}`);
+assert.match(css, /\.orderbook \.depth\.bid\{background:rgba\(16,185,129,\.16\)!important;border-left:2px solid rgba\(16,185,129,\.45\)!important/);
+assert.match(css, /\.orderbook \.depth\.ask\{background:rgba\(248,113,113,\.16\)!important;border-left:2px solid rgba\(248,113,113,\.45\)!important/);
+assert.match(css, /\.orderbook \.mid-price\{background:#111C32;color:#F8FAFC/);
+assert.match(css, /html\[data-theme=\"light\"\] \.orderbook \.mid-price\{background:#F1F5F9;color:#0F172A/);
+assert.match(css, /\[hidden\],\.bp-select-menu\[hidden\][^}]*display:none!important[^}]*visibility:hidden!important/);
+assert.match(css, /\.bp-select-menu:not\(\.is-open\)[^}]*display:none!important/);
+assert.ok((css.match(/\[hidden\],\.bp-select-menu\[hidden\]/g)||[]).length>=2,'global hidden/closed enforcement is present at both the start and end of the design system stylesheet');
+assert.match(index, /\[hidden\],\.bp-select-menu\[hidden\][^}]*display:none!important/);
+assert.match(ui, /function closeAllSelectMenus\(/);
+assert.match(ui, /selectMenuManager\.register\(record\)/);
+assert.match(ui, /selectPortal\.hidden=true/);
+assert.match(ui, /selectMenuManager\.open\(record\)/);
+assert.match(ui, /bp-select-backdrop/);
+assert.match(ui, /window\.addEventListener\('resize',closeAllSelectMenus\)/);
+assert.match(ui, /window\.addEventListener\('scroll',[^;]*closeAllSelectMenus/);
+assert.match(ui, /select\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\)/);
+assert.doesNotMatch(ui, /bp-select-list\[data-open/);
+assert.match(css, /\.bp-select-control,\.bp-select-trigger\{[^}]*min-height:40px/);
+assert.match(css, /\.bp-select-menu\.is-open\{[^}]*display:block!important/);
+// Exercise the same open/close manager used by the enhancer with several simulated select records.
+const vm = require('node:vm');
+const fakeDocument = { readyState:'loading', addEventListener(){}, querySelector(){return null}, querySelectorAll(){return []} };
+const fakeWindow = { addEventListener(){}, matchMedia(){return {matches:false}}, innerWidth:1280, innerHeight:800 };
+const context = { window:fakeWindow, document:fakeDocument, setTimeout, clearTimeout, console, Event:function(){}, CustomEvent:function(){}, MutationObserver:function(){} };
+vm.runInNewContext(ui,context);
+const manager=fakeWindow.BluePeakSelects.createSelectMenuManager();
+const records=[];function fakeElement(){const classes=new Set();return{hidden:false,classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),contains:x=>classes.has(x)},attrs:{},setAttribute(k,v){this.attrs[k]=v},getAttribute(k){return this.attrs[k]}}}
+for(let i=0;i<9;i++){const record={menu:fakeElement(),control:fakeElement()};manager.register(record);records.push(record)}
+assert.equal(manager.getOpenCount(),0,'nine controls start with all menus hidden');
+assert.ok(records.every(r=>r.menu.hidden&&!r.menu.classList.contains('is-open')&&r.control.attrs['aria-expanded']==='false'));
+manager.open(records[3]);assert.equal(manager.getOpenCount(),1);assert.equal(manager.active,records[3]);
+manager.open(records[7]);assert.equal(manager.getOpenCount(),1,'opening another control closes the previously active menu');assert.equal(manager.active,records[7]);
+manager.closeAll();assert.equal(manager.getOpenCount(),0);assert.ok(records.every(r=>r.menu.hidden&&r.control.attrs['aria-expanded']==='false'));
+assert.match(ui, /bp-password-field-wrap/);
 assert.match(ui, /bp-password-field-wrap/);
 assert.match(index, /volumeBull:'rgba\(8, 153, 129, 0\.35\)'/);
 assert.match(index, /volumeBear:'rgba\(242, 54, 69, 0\.35\)'/);
@@ -139,7 +174,7 @@ for (const file of sourceFiles) {
     const saturation = max ? delta / max : 0;
     if (hue >= 75 && hue <= 170 && saturation >= 0.2 && max >= 0.18) {
       const hex = literal.slice(1, 7).toUpperCase();
-      assert.ok(['089981','26A69A','10B981'].includes(hex) && ['index.html','bluepeak-design-system.css'].includes(path.basename(file)), `unapproved green-family literal ${literal} in ${path.relative(__dirname, file)}`);
+      assert.ok(['089981','26A69A','10B981','059669'].includes(hex) && ['index.html','bluepeak-design-system.css'].includes(path.basename(file)), `unapproved green-family literal ${literal} in ${path.relative(__dirname, file)}`);
     }
   }
 }

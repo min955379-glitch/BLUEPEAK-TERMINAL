@@ -149,7 +149,7 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
   const colorSource = zeroGreenFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n');
   assert.doesNotMatch(colorSource, /\b(?:green|emerald|lime|teal)\b|--green/i, 'named green-family colors are prohibited');
   const hsv = (r,g,b) => {const max=Math.max(r,g,b),min=Math.min(r,g,b),delta=max-min;let h=0;if(delta){if(max===r)h=((g-b)/delta)%6;else if(max===g)h=(b-r)/delta+2;else h=(r-g)/delta+4;h*=60;if(h<0)h+=360}return {h,s:max===0?0:delta/max,v:max}};
-  const approvedChartGreens = new Set(['089981','26A69A','10B981']);
+  const approvedChartGreens = new Set(['089981','26A69A','10B981','059669']);
   for (const literal of colorSource.match(/#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g)||[]) {
     const hex=literal.slice(1,7),rgb=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255),{h,s,v}=hsv(...rgb);
     if(h>=75&&h<=170&&s>=.2&&v>=.18)assert.ok(approvedChartGreens.has(hex.toUpperCase()), `unapproved green-hued UI color literal: ${literal}`);
@@ -159,7 +159,7 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
     if(match[1].toLowerCase().startsWith('rgb')&&values.length>=3){({h:hue,s:saturation,v:brightness}=hsv(...values.slice(0,3).map(value=>Math.max(0,Math.min(255,value))/255)))}
     else if(match[1].toLowerCase().startsWith('hsl')&&values.length>=3){hue=((values[0]%360)+360)%360;saturation=values[1]/100;brightness=values[2]/100}
     else continue;
-    if(hue>=75&&hue<=170&&saturation>=.2&&brightness>=.18)assert.ok(match[1].toLowerCase().startsWith('rgb')&&((values[0]===8&&values[1]===153&&values[2]===129)||(values[0]===16&&values[1]===185&&values[2]===129&&match[0].includes('.15'))), `unapproved green-hued functional color: ${match[0]}`);
+    if(hue>=75&&hue<=170&&saturation>=.2&&brightness>=.18)assert.ok(match[1].toLowerCase().startsWith('rgb')&&((values[0]===8&&values[1]===153&&values[2]===129)||(values[0]===16&&values[1]===185&&values[2]===129&&(['.15','.16','.45'].some(x=>match[0].includes(x))))||(values[0]===5&&values[1]===150&&values[2]===105&&(['.14','.4'].some(x=>match[0].includes(x))))), `unapproved green-hued functional color: ${match[0]}`);
   }
 
   console.log('PASS test-admin-user-management: disable/enable safeguards, immediate hard delete, FK/session cleanup, hidden deleted rows, soft-deleted collision cleanup/reuse, owner/self/last-admin protections, confirmation, MFA/AAL2, migration and approved chart-green palette contracts.');
