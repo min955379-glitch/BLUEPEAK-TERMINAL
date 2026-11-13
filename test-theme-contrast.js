@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const css = fs.readFileSync(path.join(__dirname, 'bluepeak-design-system.css'), 'utf8');
 const ui = fs.readFileSync(path.join(__dirname, 'bluepeak-ui.js'), 'utf8');
+const accessUI = fs.readFileSync(path.join(__dirname, 'bluepeak-access-ui.js'), 'utf8');
 const index = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const adminDashboard = fs.readFileSync(path.join(__dirname, 'admin-dashboard.html'), 'utf8');
 const adminUsers = fs.readFileSync(path.join(__dirname, 'admin-users.html'), 'utf8');
@@ -73,8 +74,24 @@ assert.match(ui, /selectMenuManager\.register\(record\)/);
 assert.match(ui, /selectPortal\.hidden=true/);
 assert.match(ui, /selectMenuManager\.open\(record\)/);
 assert.match(ui, /bp-select-backdrop/);
-assert.match(ui, /window\.addEventListener\('resize',closeAllSelectMenus\)/);
-assert.match(ui, /window\.addEventListener\('scroll',[^;]*closeAllSelectMenus/);
+assert.doesNotMatch(ui, /addEventListener\(['\"](?:scroll|resize)['\"][^;]*closeAllSelectMenus/, 'dropdowns must not auto-close on scroll or viewport changes');
+assert.match(ui, /select\.closest\('label'\)/, 'custom select enhancement detects wrapping labels');
+assert.match(ui, /labelEl\.parentNode\.insertBefore\(wrapper,labelEl\.nextSibling\)/, 'portal trigger is moved outside wrapping label to prevent synthetic activation');
+assert.match(ui, /select\.style\.setProperty\('pointer-events','none','important'\)/);
+assert.match(ui, /select\.tabIndex=-1/);
+assert.match(ui, /selectPortal\.dataset\.openedAt=String\(openedAt\)/);
+assert.match(ui, /window\.__bpSelectLastOpenedAt=openedAt/);
+assert.match(ui, /Date\.now\(\)-\(window\.__bpSelectLastOpenedAt\|\|0\)<350/);
+assert.match(ui, /data-bp-select-title/);
+assert.match(ui, /✕ Close/);
+assert.match(css, /\.bp-select-menu\.is-mobile\{[^}]*bottom:calc\(16px \+ env\(safe-area-inset-bottom\)\)[^}]*max-height:68vh!important[^}]*-webkit-overflow-scrolling:touch!important[^}]*z-index:100001!important/);
+assert.match(css, /\.bp-select-backdrop:not\(\[hidden\]\)\{[^}]*z-index:100000[^}]*rgba\(4,10,22,\.72\)/);
+assert.match(accessUI, /bp_last_full_scan_snapshot_v2/);
+assert.match(accessUI, /SCAN_SNAPSHOT_TTL=5\*60\*1000/);
+assert.match(accessUI, /Cached · Refreshing live/);
+assert.match(accessUI, /onProgress:p=>/);
+assert.match(accessUI, /partialResults/);
+assert.match(accessUI, /limit:320,dailyLimit:60,concurrency:9/);
 assert.match(ui, /select\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\)/);
 assert.doesNotMatch(ui, /bp-select-list\[data-open/);
 assert.match(css, /\.bp-select-control,\.bp-select-trigger\{[^}]*min-height:40px/);
@@ -93,6 +110,50 @@ assert.ok(records.every(r=>r.menu.hidden&&!r.menu.classList.contains('is-open')&
 manager.open(records[3]);assert.equal(manager.getOpenCount(),1);assert.equal(manager.active,records[3]);
 manager.open(records[7]);assert.equal(manager.getOpenCount(),1,'opening another control closes the previously active menu');assert.equal(manager.active,records[7]);
 manager.closeAll();assert.equal(manager.getOpenCount(),0);assert.ok(records.every(r=>r.menu.hidden&&r.control.attrs['aria-expanded']==='false'));
+
+(async()=>{
+// Exercise the actual select enhancer with a wrapping label at a mobile viewport.
+class MiniElement {
+  constructor(tag, owner) { this.tagName=tag.toUpperCase(); this.owner=owner; this.children=[]; this.parentNode=null; this.attrs={}; this.dataset={}; this.hidden=false; this.disabled=false; this.tabIndex=0; this.style={setProperty(){}}; this.listeners={}; this._className=''; this.classList={add:(...xs)=>xs.forEach(x=>this._classSet().add(x)),remove:(...xs)=>xs.forEach(x=>this._classSet().delete(x)),contains:x=>this._classSet().has(x),toggle:(x,on)=>{const set=this._classSet();if(on===undefined)on=!set.has(x);on?set.add(x):set.delete(x);return on}}; }
+  _classSet(){if(!this._classes)this._classes=new Set(this._className.split(/\s+/).filter(Boolean));return this._classes}
+  set className(value){this._className=value;this._classes=new Set(String(value).split(/\s+/).filter(Boolean))} get className(){return [...this._classSet()].join(' ')}
+  setAttribute(k,v){this.attrs[k]=String(v)} getAttribute(k){return this.attrs[k]??null} removeAttribute(k){delete this.attrs[k]}
+  addEventListener(k,fn){(this.listeners[k]??=[]).push(fn)} dispatchEvent(e){e.target??=this;for(const fn of this.listeners[e.type]||[])fn(e);return !e.defaultPrevented}
+  append(...nodes){for(const n of nodes){if(!n)continue;if(n.parentNode)n.parentNode.removeChild(n);this.children.push(n);n.parentNode=this}}
+  appendChild(n){this.append(n);return n}
+  insertBefore(n,ref){if(n.parentNode)n.parentNode.removeChild(n);const i=ref?this.children.indexOf(ref):-1;if(i<0)this.children.push(n);else this.children.splice(i,0,n);n.parentNode=this;return n}
+  removeChild(n){const i=this.children.indexOf(n);if(i>=0)this.children.splice(i,1);n.parentNode=null;return n}
+  replaceChildren(...nodes){for(const n of this.children)n.parentNode=null;this.children=[];this.append(...nodes)}
+  contains(node){for(let n=node;n;n=n.parentNode)if(n===this)return true;return false}
+  closest(selector){for(let n=this;n;n=n.parentNode)if((selector.startsWith('.')&&n.classList?.contains(selector.slice(1)))||n.tagName?.toLowerCase()===selector.toLowerCase())return n;return null}
+  querySelectorAll(selector){const all=[];const walk=n=>n.children.forEach(c=>{all.push(c);walk(c)});walk(this);return all.filter(n=>selector==='[role="option"]'?n.getAttribute('role')==='option':selector==='[role="listbox"]'?n.getAttribute('role')==='listbox':selector==='[aria-selected="true"]'?n.getAttribute('aria-selected')==='true':selector==='[data-bp-select-header]'?Object.hasOwn(n.dataset,'bpSelectHeader'):selector==='[data-bp-select-title]'?Object.hasOwn(n.dataset,'bpSelectTitle'):false)}
+  querySelector(selector){return this.querySelectorAll(selector)[0]||null}
+  focus(){this.owner.activeElement=this}
+  get isConnected(){let n=this;while(n.parentNode)n=n.parentNode;return n===this.owner.body}
+  getBoundingClientRect(){return{left:20,bottom:100,width:120}}
+  get textContent(){return this._textContent||this.children.map(x=>x.textContent||'').join(' ')} set textContent(x){this._textContent=String(x);this.replaceChildren()}
+}
+const mobileDoc={readyState:'loading',listeners:{},activeElement:null,querySelectorAll(){return [mobileSelect]},querySelector(){return null},addEventListener(k,fn){(this.listeners[k]??=[]).push(fn)},createElement(tag){return new MiniElement(tag,this)}};
+mobileDoc.body=new MiniElement('body',mobileDoc);mobileDoc.documentElement=new MiniElement('html',mobileDoc);mobileDoc.documentElement.setAttribute('data-theme','dark');
+const mobileWindow={innerWidth:390,innerHeight:844,listeners:{},matchMedia:()=>({matches:true}),addEventListener(k,fn){(this.listeners[k]??=[]).push(fn)}};
+const label=new MiniElement('label',mobileDoc);label.textContent='Minimum listing age';const host=new MiniElement('div',mobileDoc);host.append(label);mobileDoc.body.append(host);
+const mobileSelect=new MiniElement('select',mobileDoc);mobileSelect.options=[{textContent:'30 days',disabled:false},{textContent:'60 days',disabled:false}];mobileSelect.selectedIndex=0;Object.defineProperty(mobileSelect,'selectedOptions',{get(){return [this.options[this.selectedIndex]]}});mobileSelect.labels=[label];mobileSelect.addEventListener=MiniElement.prototype.addEventListener;label.append(mobileSelect);
+const mobileContext={window:mobileWindow,document:mobileDoc,setTimeout,clearTimeout,console,Event:function(type){this.type=type},CustomEvent:function(type){this.type=type},MutationObserver:function(){this.observe=()=>{}},localStorage:{getItem(){return null},setItem(){}}};
+const instrumentedUi=ui.replace("if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize,{once:true});else initialize();","window.__testInitializeSelects=initializeSelects;");
+vm.runInNewContext(instrumentedUi,mobileContext);mobileWindow.__testInitializeSelects();
+const trigger=host.children[1].children.find(x=>x.classList.contains('bp-select-trigger'));
+assert.ok(trigger,'enhanced trigger is placed after and outside its wrapping label');assert.equal(label.contains(mobileSelect),false,'native select is relocated out of the wrapping label');
+let prevented=false,stopped=false;label.dispatchEvent({type:'click',target:trigger,preventDefault(){prevented=true},stopPropagation(){stopped=true}});assert.ok(prevented&&stopped,'label click guard prevents native synthetic activation');
+trigger.dispatchEvent({type:'click',preventDefault(){},stopPropagation(){}});
+const mobilePortal=mobileDoc.body.children.find(x=>x.classList.contains('bp-select-menu'));
+assert.ok(mobilePortal&&mobilePortal.isConnected&&!mobilePortal.hidden&&mobilePortal.classList.contains('is-open'),'mobile menu opens in the document.body portal');assert.equal(mobileWindow.BluePeakSelects.getOpenCount(),1);assert.equal(mobilePortal.querySelectorAll('[role="option"]').length,2);
+assert.equal(mobilePortal.classList.contains('is-mobile'),true);assert.equal(mobileWindow.__bpSelectLastOpenedAt,Number(mobilePortal.dataset.openedAt));
+for(const type of ['scroll','resize'])for(const fn of mobileWindow.listeners[type]||[])fn({type});assert.equal(mobilePortal.hidden,false,'scroll and resize leave the menu open');
+for(const fn of mobileDoc.listeners.click||[])fn({type:'click',target:host,preventDefault(){},stopPropagation(){}});assert.equal(mobilePortal.hidden,false,'outside ghost click during the guard leaves the menu open');
+const backdrop=mobileDoc.body.children.find(x=>x.classList.contains('bp-select-backdrop'));backdrop.dispatchEvent({type:'click',preventDefault(){},stopPropagation(){}});assert.equal(mobilePortal.hidden,false,'backdrop tap-through is ignored during the opening guard');
+await new Promise(resolve=>setTimeout(resolve,360));backdrop.dispatchEvent({type:'click',preventDefault(){},stopPropagation(){}});assert.equal(mobilePortal.hidden,true,'backdrop closes the menu after the 350 ms guard');
+let changeEvents=0;mobileSelect.addEventListener('change',()=>changeEvents++);trigger.dispatchEvent({type:'click',preventDefault(){},stopPropagation(){}});mobilePortal.querySelectorAll('[role=\"option\"]')[1].dispatchEvent({type:'click',preventDefault(){},stopPropagation(){}});assert.equal(mobilePortal.hidden,true,'choosing an option closes the menu');assert.equal(mobileSelect.selectedIndex,1);assert.equal(changeEvents,1,'native change event is emitted after selection');
+trigger.dispatchEvent({type:'click',preventDefault(){},stopPropagation(){}});mobilePortal.querySelector('[role=\"listbox\"]').dispatchEvent({type:'keydown',key:'Escape',preventDefault(){}});assert.equal(mobilePortal.hidden,true,'Escape closes the mobile sheet');
 assert.match(ui, /bp-password-field-wrap/);
 assert.match(ui, /bp-password-field-wrap/);
 assert.match(index, /volumeBull:'rgba\(8, 153, 129, 0\.35\)'/);
@@ -179,3 +240,4 @@ for (const file of sourceFiles) {
   }
 }
 console.log(`PASS test-theme-contrast: dual theme tokens, >=AA text pairs, AAA primary/button pairs, synchronized theme controls, resolved chart palette, universal candle colors, Zig Zag UI, and no unapproved green colors (${sourceFiles.length} shipped source files scanned).`);
+})().catch(error=>{console.error(error);process.exitCode=1});

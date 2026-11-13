@@ -1,22 +1,22 @@
 /* Batch scanner adapter for watched assets; fetches only completed candles. */
 (function(root,factory){const api=factory(root.BPPatterns);if(typeof module!=='undefined'&&module.exports)module.exports=api;root.BPAssetScanner=api;})(typeof globalThis!=='undefined'?globalThis:this,function(P){
   'use strict';
-  const MIRRORS=['https://data-api.binance.vision','https://api.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com'];
+  const MIRRORS=['https://data-api.binance.vision','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com'];
   const KLINE='/api/v3/klines',TICKER='/api/v3/ticker/24hr',HOUR=3600000,DAY=86400000,CACHE_TTL=180000;
-  const memoryCache=new Map(),inflight=new Map();
+  const memoryCache=new Map(),inflight=new Map();let mirrorCursor=0;
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   function storage(kind){try{return globalThis[kind]}catch{return null}}
   function cacheRead(key){if(memoryCache.has(key))return memoryCache.get(key);for(const kind of ['sessionStorage','localStorage'])try{const raw=storage(kind)?.getItem(key);if(raw){const data=JSON.parse(raw);memoryCache.set(key,data);return data}}catch{}return null}
   function cacheWrite(key,value,{session=true,summaryKey=null}={}){memoryCache.set(key,value);try{storage(session?'sessionStorage':'localStorage')?.setItem(key,JSON.stringify(value))}catch{}if(summaryKey)try{storage('localStorage')?.setItem(summaryKey,JSON.stringify({savedAt:value.savedAt,count:value.data?.length||value.rows?.length||0,first:value.data?.[0]?.time??null,last:value.data?.at?.(-1)?.time??null}))}catch{}}
   function normalizePath(pathWithQuery){try{const u=new URL(pathWithQuery,MIRRORS[0]);return u.pathname+u.search}catch{return pathWithQuery.startsWith('/')?pathWithQuery:`/${pathWithQuery}`}}
   async function fetchBinanceJson(pathWithQuery,{fetchImpl=fetch,timeoutMs=3500,mirrors=MIRRORS}={}){
-    const path=normalizePath(pathWithQuery);let lastError;
-    for(const host of mirrors){const controller=new AbortController();let timer;try{const request=(async()=>{const response=await fetchImpl(host+path,{headers:{accept:'application/json'},signal:controller.signal});if(!response.ok)throw new Error(`Binance request failed (${response.status}) at ${host}`);return response.json()})();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error(`Binance request timed out after ${timeoutMs}ms at ${host}`))},timeoutMs)});return await Promise.race([request,timeout])}catch(error){lastError=error}finally{clearTimeout(timer)}}throw lastError||new Error('All Binance market-data mirrors failed');
+    const path=normalizePath(pathWithQuery);let lastError;const start=mirrors===MIRRORS?(mirrorCursor++%mirrors.length):0,ordered=[...mirrors.slice(start),...mirrors.slice(0,start)];
+    for(const host of ordered){const controller=new AbortController();let timer;try{const request=(async()=>{const response=await fetchImpl(host+path,{headers:{accept:'application/json'},signal:controller.signal});if(!response.ok)throw new Error(`Binance request failed (${response.status}) at ${host}`);return response.json()})();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error(`Binance request timed out after ${timeoutMs}ms at ${host}`))},timeoutMs)});return await Promise.race([request,timeout])}catch(error){lastError=error}finally{clearTimeout(timer)}}throw lastError||new Error('All Binance market-data mirrors failed');
   }
   function mapTickers(rows,symbols){const wanted=symbols?new Set(symbols):null;return new Map((Array.isArray(rows)?rows:[]).filter(x=>/^[A-Z0-9]{5,20}$/.test(x.symbol||'')&&(!wanted||wanted.has(x.symbol))).map(x=>[x.symbol,{...x,lastPrice:+x.lastPrice,priceChange:+x.priceChange,priceChangePercent:+x.priceChangePercent,openPrice:+x.openPrice,highPrice:+x.highPrice,lowPrice:+x.lowPrice,quoteVolume:+x.quoteVolume,volume:+x.volume}]))}
   async function fetchCandles(symbol,interval,n,fetchImpl,now){const step=interval==='1d'?DAY:interval==='4h'?4*HOUR:interval==='15m'?900000:interval==='5m'?300000:interval==='1m'?60000:HOUR,endTime=Math.floor(now/step)*step-1;const rows=await fetchBinanceJson(`${KLINE}?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${n}&endTime=${endTime}`,{fetchImpl});const data=rows.map(r=>({time:+r[0],open:+r[1],high:+r[2],low:+r[3],close:+r[4],vol:+r[5],quoteVol:+r[7]})).filter(c=>Number.isFinite(c.close)&&c.time+step<=now),value={savedAt:Date.now(),limit:n,data};cacheWrite(`bp_klines_v1:${symbol}:${interval}`,value,{summaryKey:`bp_klines_summary_v1:${symbol}:${interval}`});return data}
   async function loadCandles(symbol,{interval='1h',limit=250,fetchImpl=fetch,now=Date.now(),forceRefresh=false}={}){
-    if(!/^[A-Z0-9]{5,20}$/.test(symbol))throw new Error('Invalid market symbol');if(!['1h','1d','4h','15m','5m','1m'].includes(interval))throw new Error('Unsupported chart timeframe');const n=Math.max(100,Math.min(1000,Number(limit)||250)),key=`bp_klines_v1:${symbol}:${interval}`,cached=cacheRead(key);
+    if(!/^[A-Z0-9]{5,20}$/.test(symbol))throw new Error('Invalid market symbol');if(!['1h','1d','4h','15m','5m','1m'].includes(interval))throw new Error('Unsupported chart timeframe');const n=Math.max(60,Math.min(1000,Number(limit)||250)),key=`bp_klines_v1:${symbol}:${interval}`,cached=cacheRead(key);
     if(cached?.data?.length&&cached.limit>=n&&!forceRefresh){if(Date.now()-cached.savedAt<CACHE_TTL)return cached.data.slice(-n);if(!inflight.has(key))inflight.set(key,fetchCandles(symbol,interval,n,fetchImpl,now).finally(()=>inflight.delete(key)).catch(()=>{}));return cached.data.slice(-n)}
     if(inflight.has(key)&&!forceRefresh)return (await inflight.get(key)).slice(-n);const task=fetchCandles(symbol,interval,n,fetchImpl,now);inflight.set(key,task);try{return (await task).slice(-n)}finally{inflight.delete(key)}
   }
@@ -51,19 +51,25 @@
     return{asset,symbol:asset?.symbol,price:latest,high24h:Number(ticker?.highPrice)||null,low24h:Number(ticker?.lowPrice)||null,volume24h:Number(ticker?.quoteVolume)||null,marketCap:Number(marketCap)||null,historyAgeDays:first?Math.max(0,(Date.now()-first)/DAY):null,historyStart:first,timeframes:matrix,trendContinuation:P?.trendContinuationAnalysis(candlesByTimeframe)||null,levels,patterns:primary.length>=80?P.detect(primary,'1h').current:[],signals:primary.length>=60?P.scanStrategies({candles:primary,dailyCandles:candlesByTimeframe['1d']||[],timeframe:'1h',quoteVolume24h:Number(ticker?.quoteVolume)||0}):[]};
   }
   async function loadMarketCaps(assets,{fetchImpl=fetch}={}){const ids=(assets||[]).map(a=>a.cg).filter(Boolean);if(!ids.length)return new Map();const url=`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids.join(','))}`;const r=await fetchImpl(url,{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`Market-cap snapshot failed (${r.status})`);const data=await r.json();return new Map((data||[]).map(x=>[x.id,Number(x.market_cap)||null]));}
-  async function scanAssets(assets,{interval='1h',limit=1000,concurrency=3,fetchImpl=fetch,onProgress=()=>{},now=Date.now(),v1Options={}}={}){
+  async function scanAssets(assets,{interval='1h',limit=320,dailyLimit=60,concurrency=9,fetchImpl=fetch,onProgress=()=>{},now=Date.now(),v1Options={}}={}){
     if(!P||typeof P.detect!=='function')throw new Error('Pattern engine not loaded');
-    const results=[];let next=0,done=0,tickerSnapshot=new Map();try{tickerSnapshot=await loadAllTickers({fetchImpl,symbols:assets.map(a=>a.symbol)})}catch{}
-    const worker=async()=>{while(next<assets.length){const i=next++,asset=assets[i];try{
-      const [candles,daily]=await Promise.all([
+    const priority=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],rank=new Map(priority.map((symbol,index)=>[symbol,index])),ordered=[...assets].sort((a,b)=>(rank.get(a.symbol)??priority.length)-(rank.get(b.symbol)??priority.length));
+    const results=Array(ordered.length);let next=0,done=0;
+    const tickerTask=loadAllTickers({fetchImpl,symbols:ordered.map(a=>a.symbol)}).catch(()=>new Map());
+    const worker=async()=>{while(next<ordered.length){const i=next++,asset=ordered[i];try{
+      const [candles,daily,tickerSnapshot]=await Promise.all([
         loadCandles(asset.symbol,{interval,limit,fetchImpl,now}),
-        loadCandles(asset.symbol,{interval:'1d',limit:1000,fetchImpl,now})
-      ]);const ticker=tickerSnapshot.get(asset.symbol)||null,quoteVolume24h=Number(ticker?.quoteVolume)||await load24hQuoteVolume(asset.symbol,{fetchImpl});
+        loadCandles(asset.symbol,{interval:'1d',limit:dailyLimit,fetchImpl,now}),
+        tickerTask
+      ]);const ticker=tickerSnapshot.get(asset.symbol)||null,quoteVolume24h=Number(ticker?.quoteVolume)||0;
       const analysis=P.detect(candles,interval);
       results[i]={asset,interval,candles,daily,ticker,quoteVolume24h,analysis,v1:null,error:null};
-    }catch(error){results[i]={asset,interval,candles:[],daily:[],analysis:null,v1:null,error:String(error?.message||error)}}done++;onProgress({done,total:assets.length,asset:asset.symbol});await sleep(180)}};
-    await Promise.all(Array.from({length:Math.max(1,Math.min(4,concurrency))},worker));
-    const btc=results.find(r=>r.asset.symbol==='BTCUSDT'&&!r.error)?.candles||null;
+    }catch(error){results[i]={asset,interval,candles:[],daily:[],ticker:null,quoteVolume24h:0,analysis:null,v1:null,error:String(error?.message||error)}}
+      done++;const btc=results.find(r=>r?.asset.symbol==='BTCUSDT'&&!r.error)?.candles||null;if(btc)for(const r of results)if(r&&!r.error&&!r.v1)r.v1=P.detectV1({hourly:r.candles,daily:r.daily,quoteVolume24h:r.quoteVolume24h,options:v1Options,btcHourly:btc});
+      const partialResults=results.filter(Boolean),progress={done,completed:done,total:ordered.length,asset:asset.symbol,latestAssetResult:results[i],partialResults};try{onProgress(progress)}catch{}await sleep(0);
+    }};
+    await Promise.all(Array.from({length:Math.max(1,Math.min(9,concurrency,ordered.length||1))},worker));
+    const btc=results.find(r=>r?.asset.symbol==='BTCUSDT'&&!r.error)?.candles||null;
     for(const r of results)if(!r.error)r.v1=P.detectV1({hourly:r.candles,daily:r.daily,quoteVolume24h:r.quoteVolume24h,options:v1Options,btcHourly:btc});
     return results;
   }
