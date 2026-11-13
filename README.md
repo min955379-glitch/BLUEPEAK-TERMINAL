@@ -36,9 +36,9 @@ The customer/admin login forms retain their existing server-side auth flows. Adm
 - Added `20261112160047_purge_legacy_soft_deleted_buyers.sql`; Supabase production migration history records it as applied. A preflight query found zero remaining legacy soft-deleted buyers, and post-migration counts remain zero.
 - `secure-bluepeak-admin` is ACTIVE, version 8, with the restricted `list-audit` operation and existing direct-delete protections.
 - The previously requested production test identity `saaaaaddKhan112` / `saaaaaddkhan112@users.bluepeak.invalid` remains absent: zero Auth users, profiles, and linked active sessions. Audit history remains.
-- Repository `main` is at commit `17c7cb45a941cc67e41e23bac6a6fa4d53fb96ec`; all 16 application/backend source paths checked against it match. The four release-status documents were refreshed locally after deployment verification and were not part of that push.
-- Vercel deployment `dpl_38r8i8JdDAEcURSqPGgKGsmCM5CT` is READY/PROMOTED for that commit and has the `bluepeak-terminal.vercel.app` alias. Production CSS contains both dark and light token sets; the theme helper and sign-in/admin endpoints return HTTP 200.
-- Unauthenticated HTML requests to `/admin/users` and `/admin/dashboard` redirect to `/admin`, and `/app` redirects to `/`. The protected routes return 401 JSON when requested as non-HTML. Authenticated customer/admin visual verification remains unperformed.
+- The owner pushed the chart/theme/Zig Zag update to GitHub `main`, commit `0e7e8ddf39bd6dc431395bc97fe90a4e70e8c6dc`.
+- Vercel deployment `dpl_3UwNnDVxqTfimytRRF1TLZv2psFb` is READY/PROMOTED for that commit, with the `bluepeak-terminal.vercel.app` production alias.
+- Production smoke checks: `/login` returns 200; shared design CSS returns 200 with `text/css`, shared UI helper returns 200 with `application/javascript`, and both assets match the local worktree byte-for-byte. An unauthenticated `/app` request returns 401. These checks do not verify the authenticated chart UI or admin workflows.
 
 ## Local development and tests
 
@@ -65,6 +65,12 @@ Current local worktree: all six suites (`test-gateway-auth.js`, `test-admin-user
 
 ## Release and archive
 
-The chart/theme/Zig Zag changes in this worktree are local, not committed, uploaded, or deployed. Rebuilt `/home/user/BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` from the full safe project tree (49 files); ZIP integrity and required-file checks passed, and all six suites passed again from an extracted copy. `.env`, `.vercel`, and `node_modules` are excluded. This assistant does not push. The previously verified production build is older and does not include this local chart revision. Authenticated customer/admin visuals and protected workflows require an authorized session and remain unverified.
+The owner has pushed the application update; this assistant did not push or deploy. The current production deployment above is READY/PROMOTED. The release archive at `/home/user/BLUEPEAK-TERMINAL-USER-MANAGEMENT-UPDATE.zip` contains the complete safe 49-file project tree; integrity/required-file checks and all six suites from the extracted archive pass. `.env`, `.vercel`, and `node_modules` are excluded. Authenticated customer/admin visuals and protected workflows still require authorized acceptance.
 
 Never place Supabase service-role credentials, user passwords, TOTP codes, environment files, or deployment credentials in source or the archive. Keep RLS enabled and never grant the browser direct access to profiles, sessions, or audit tables.
+
+## Six-stage market terminal expansion (local worktree)
+
+Implemented the six-stage market-analysis expansion in this worktree: an 18-pair Binance spot watchlist and market overview; per-coin detail panels with quote, market-cap (when public data is available), timeframe trend/RSI, reference levels and setup links; interactive chart indicators and levels; historical pattern outcomes and continuation context; six independently selectable rule-based scanners; a deterministic fee/slippage-aware backtester; and signal cards with a browser-local, deduplicated outcome ledger. Custom accessible dropdowns, responsive scanner/backtester layouts, order-book depth colors, and chart links for pattern occurrences/trades are wired to the relevant controls. Scanner-specific approximations and data limitations are identified in the UI; none of this is financial advice, a prediction, or a guaranteed signal.
+
+Verification for this expansion: all six regression suites pass (`test-gateway-auth.js`, `test-admin-user-management.js`, `test-pattern-scanner.js`, `test-asset-scanner.js`, `test-theme-contrast.js`, `test-v1.js`); changed JavaScript and the main inline application script pass `node --check`; `git diff --check` passes. The browser-local signal ledger uses `bp_signal_history_v1`. These results are automated/source checks, not authenticated browser/AAL2 acceptance. This worktree has not been pushed or deployed by the assistant; the production deployment documented above predates this expansion.

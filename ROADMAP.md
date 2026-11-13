@@ -17,9 +17,9 @@
 - Existing status and audit-FK migrations are applied. The linked production project is Supabase `ivpzznjunvxdfnpzggxp`.
 
 ### Deployment and remaining acceptance
-- Repository `main` is at `17c7cb45a941cc67e41e23bac6a6fa4d53fb96ec`; all 16 application/backend source paths checked match. Release-status document edits made locally after deployment verification are not part of that push. Vercel deployment `dpl_38r8i8JdDAEcURSqPGgKGsmCM5CT` is READY/PROMOTED for that commit and owns the production alias.
-- All six local regression suites, JavaScript syntax checks, and `git diff --check` pass after the chart/theme/Zig Zag updates. The complete safe 49-file ZIP has been recreated and integrity-checked; all six suites pass from the extracted archive. These changes are local and not deployed.
-- Public production smoke checks pass; protected routes remain gated and unauthenticated `POST /api/admin` returns 401.
+- Owner-pushed commit `0e7e8ddf39bd6dc431395bc97fe90a4e70e8c6dc` is READY/PROMOTED in Vercel deployment `dpl_3UwNnDVxqTfimytRRF1TLZv2psFb` and owns the production alias.
+- Production smoke checks: `/login` 200; CSS/JS assets 200, correct MIME, and byte-identical to the local source; unauthenticated `/app` 401. Authenticated chart/admin acceptance is still outstanding.
+- All six local regression suites, JavaScript syntax checks, and `git diff --check` pass. The complete safe 49-file ZIP is integrity-checked; all six suites pass from its extracted copy. No push or deployment was performed by this assistant.
 - Public production smoke checks pass for sign-in, CSS/theme assets, and protected-route behavior. Signed-in customer/admin visual verification in both themes and authenticated admin workflows are still unverified. No supplied customer credential was used. Privately test with authorized accounts; use disposable identities for destructive admin acceptance and avoid the owner, last-admin, and real customers.
 
 ## Ongoing platform maintenance
@@ -27,3 +27,9 @@
 - Preserve protected page/API routing, Supabase Auth, MFA/AAL2, RLS, and service-role isolation.
 - Continue scanner and mobile-layout regression coverage; all current Node suites pass.
 - Keep deployment and migration documentation aligned with the exact versions running in each environment.
+
+### Six-stage market terminal expansion (local, not deployed)
+- Implemented the 18-pair market monitor and coin details; chart indicators/reference levels; historical pattern and continuation analysis; six independent strategy scanners; deterministic fee/slippage backtesting; and scanner cards plus a browser-local signal ledger.
+- Added responsive/mobile scanner and backtest layouts, keyboard-operable custom selects synchronized with native `change`, order-book depth styling, and chart plotting links for detected patterns and historical trades.
+- Verification: all six mandated Node suites pass, modified JavaScript and the main inline HTML application script pass `node --check`, and `git diff --check` passes. This does not replace authenticated customer/admin, visual, mobile-device, or AAL2 workflow acceptance.
+- The changes remain local and unpushed/undeployed. Production deployment records above refer to the earlier release. The prior archive is stale and must be rebuilt from the final source. Keep public OHLCV-derived analysis informational, not financial advice or prediction.

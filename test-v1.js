@@ -20,6 +20,7 @@ assert.equal(result.options.minQuoteVolume,5000000);
 assert.equal(result.stats.horizon,24);
 assert.match(P.RULES.v1,/Every step is required/);
 assert.ok(result.match,'fixture should pass all four pipeline steps');
+const v1Scanner=P.scanStrategies({candles:h,dailyCandles:d,timeframe:'1h',quoteVolume24h:12000000,only:'v1'});assert.ok(v1Scanner.length,'independent V1 strategy scanner returns the owner-rule setup');assert.equal(v1Scanner[0].strategy,'v1');
 assert.ok(result.match.reference.stop<result.match.entry,'confirmed pullback swing should produce a buffered stop reference');
 assert.ok(result.match.reference.rr2>result.match.entry&&result.match.reference.rr3>result.match.reference.rr2);
 assert.equal(result.stats.sample,0,'latest signal is excluded without 24 future candles');

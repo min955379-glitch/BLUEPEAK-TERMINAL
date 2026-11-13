@@ -159,7 +159,7 @@ const rules = import('./supabase/functions/secure-bluepeak-admin/user-management
     if(match[1].toLowerCase().startsWith('rgb')&&values.length>=3){({h:hue,s:saturation,v:brightness}=hsv(...values.slice(0,3).map(value=>Math.max(0,Math.min(255,value))/255)))}
     else if(match[1].toLowerCase().startsWith('hsl')&&values.length>=3){hue=((values[0]%360)+360)%360;saturation=values[1]/100;brightness=values[2]/100}
     else continue;
-    if(hue>=75&&hue<=170&&saturation>=.2&&brightness>=.18)assert.ok(match[1].toLowerCase().startsWith('rgb')&&values[0]===8&&values[1]===153&&values[2]===129, `unapproved green-hued functional color: ${match[0]}`);
+    if(hue>=75&&hue<=170&&saturation>=.2&&brightness>=.18)assert.ok(match[1].toLowerCase().startsWith('rgb')&&((values[0]===8&&values[1]===153&&values[2]===129)||(values[0]===16&&values[1]===185&&values[2]===129&&match[0].includes('.15'))), `unapproved green-hued functional color: ${match[0]}`);
   }
 
   console.log('PASS test-admin-user-management: disable/enable safeguards, immediate hard delete, FK/session cleanup, hidden deleted rows, soft-deleted collision cleanup/reuse, owner/self/last-admin protections, confirmation, MFA/AAL2, migration and approved chart-green palette contracts.');
