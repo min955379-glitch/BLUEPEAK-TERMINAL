@@ -239,5 +239,79 @@ for (const file of sourceFiles) {
     }
   }
 }
+
+// ---- 45-pair watchlist and the market breadth & sentiment block ----
+const watchBlock = index.slice(index.indexOf('const assets=['), index.indexOf('];', index.indexOf('const assets=[')));
+const watchSymbols = [...watchBlock.matchAll(/symbol:'([A-Z0-9]+USDT)'/g)].map(m => m[1]);
+assert.equal(watchSymbols.length, 45, 'the terminal watchlist holds exactly 45 USDT pairs');
+assert.equal(watchSymbols[0], 'BTCUSDT');
+assert.equal(watchSymbols[watchSymbols.length - 1], 'EGLDUSDT');
+for (const removed of ['BNBUSDT', 'DOGEUSDT', 'SHIBUSDT', 'PEPEUSDT', 'PAXGUSDT']) {
+  assert.ok(!watchSymbols.includes(removed), `${removed} must not remain in the watchlist`);
+}
+assert.match(index, /45-asset breadth/);
+assert.doesNotMatch(index, /18-asset breadth/);
+assert.match(index, /id="market-breadth"/);
+assert.match(index, /id="mb-donut"/);
+assert.match(index, /Assets Analyzed:/);
+assert.match(index, /Data Source: Binance Spot Public API \(24hr Ticker &amp; Live WebSocket\)/);
+assert.match(index, /Last Updated: <b id="mb-time">/);
+assert.match(index, /function renderMarketBreadth\(/);
+assert.match(index, /function refreshMarketBreadth\(/);
+assert.match(index, /marketSentiment/);
+assert.match(index, /getMarketBreadth/);
+const breadthRender = index.slice(index.indexOf('function renderMarketBreadth('), index.indexOf('function refreshMarketBreadth('));
+assert.doesNotMatch(breadthRender, /Math\.random/, 'breadth percentages must never be randomised');
+assert.doesNotMatch(index.slice(index.indexOf('const assets=['), index.indexOf('function coinSvg')), /Math\.random/, 'the watchlist metadata is static, not randomised');
+assert.match(css, /\.bp-breadth-bar\{[^}]*height:12px[^}]*border-radius:999px[^}]*overflow:hidden/);
+assert.match(css, /\.bp-breadth-seg\{[^}]*transition:width \.35s ease/);
+assert.match(css, /\.bp-donut\{[^}]*width:80px[^}]*height:80px/);
+assert.match(css, /\.bp-donut-seg\.seg-bull\{stroke:#10B981\}/);
+assert.match(css, /\.bp-donut-seg\.seg-neut\{stroke:#64748B\}/);
+assert.match(css, /\.bp-donut-seg\.seg-bear\{stroke:#F23645\}/);
+assert.match(css, /\.bp-dot\.seg-bull\{background:#10B981\}/);
+assert.match(css, /\.bp-dot\.seg-neut\{background:#64748B\}/);
+assert.match(css, /\.bp-dot\.seg-bear\{background:#F23645\}/);
+assert.match(accessUI, /bp-breadth-update/);
+assert.match(accessUI, /Scan 45 assets/);
+assert.match(accessUI, /'EGLDUSDT'/);
+
+
+// ---- render-level check of the breadth DOM (segments, donut, legend, timestamp) ----
+const breadthVm = require('node:vm');
+const breadthSource = index.slice(index.indexOf('function renderMarketBreadth('), index.indexOf('function saveMarketOverviewCache('));
+assert.ok(breadthSource.includes('function refreshMarketBreadth('), 'breadth renderer extracted for the DOM check');
+const breadthNodes = {};
+const makeNode = () => ({ textContent: '', style: {}, attrs: {}, setAttribute(key, value) { this.attrs[key] = String(value); } });
+for (const id of ['mb-updated','mb-dominant','mb-dominant-pct','mb-bull-pct','mb-neut-pct','mb-bear-pct','mb-bull-count','mb-neut-count','mb-bear-count','mb-total','mb-time','mb-bar','mb-donut','mb-seg-bull','mb-seg-neut','mb-seg-bear','mb-arc-bull','mb-arc-neut','mb-arc-bear']) breadthNodes[id] = makeNode();
+const dispatched = [];
+const sandbox = {
+  document: { getElementById: id => breadthNodes[id] || null },
+  window: { dispatchEvent: event => dispatched.push(event) },
+  CustomEvent: function (type, init) { this.type = type; this.detail = init?.detail; },
+  state: {}
+};
+breadthVm.createContext(sandbox);
+breadthVm.runInContext(breadthSource, sandbox);
+sandbox.renderMarketBreadth({ totalAnalyzed: 45, totalAssetUniverse: 45, bullishCount: 20, bearishCount: 15, neutralCount: 10, bullishPct: 44.4, bearishPct: 33.3, neutralPct: 22.3, dominant: 'BULLISH', dominantPct: 44.4, dataSource: 'Binance Spot Public API (24hr Ticker & Live WebSocket)', lastUpdated: 1700000000000 });
+assert.equal(breadthNodes['mb-seg-bull'].style.width, '44.4%');
+assert.equal(breadthNodes['mb-seg-neut'].style.width, '22.3%');
+assert.equal(breadthNodes['mb-seg-bear'].style.width, '33.3%');
+assert.equal(breadthNodes['mb-dominant'].textContent, 'BULLISH');
+assert.equal(breadthNodes['mb-dominant-pct'].textContent, '44.4%');
+assert.equal(breadthNodes['mb-bull-count'].textContent, '(20 assets)');
+assert.equal(breadthNodes['mb-neut-count'].textContent, '(10 assets)');
+assert.equal(breadthNodes['mb-bear-count'].textContent, '(15 assets)');
+assert.equal(breadthNodes['mb-total'].textContent, '45');
+assert.match(breadthNodes['mb-time'].textContent, /^\d{2}:\d{2}:\d{2}$/);
+assert.match(breadthNodes['mb-updated'].textContent, /^Last Updated: \d{2}:\d{2}:\d{2} \(Live\)$/);
+const circumference = 2 * Math.PI * 42;
+assert.ok(Math.abs(parseFloat(breadthNodes['mb-arc-bull'].attrs['stroke-dasharray']) - (44.4 / 100) * circumference) < 0.5, 'bullish arc length follows its percentage');
+assert.ok(Math.abs(parseFloat(breadthNodes['mb-arc-bear'].attrs['stroke-dasharray']) - (33.3 / 100) * circumference) < 0.5, 'bearish arc length follows its percentage');
+assert.equal(dispatched.length, 1);
+assert.equal(dispatched[0].type, 'bp-breadth-update');
+assert.equal(dispatched[0].detail.bullishPct, 44.4);
+assert.match(breadthNodes['mb-bar'].attrs['aria-label'], /Bullish 44\.4% \(20 assets\)/);
+
 console.log(`PASS test-theme-contrast: dual theme tokens, >=AA text pairs, AAA primary/button pairs, synchronized theme controls, resolved chart palette, universal candle colors, Zig Zag UI, and no unapproved green colors (${sourceFiles.length} shipped source files scanned).`);
 })().catch(error=>{console.error(error);process.exitCode=1});

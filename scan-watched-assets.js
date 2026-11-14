@@ -43,7 +43,25 @@
     const allSma=enriched.length>0&&enriched.every(x=>x.aboveSma50!==null);for(const row of enriched)row.aboveReference=allSma?row.aboveSma50:row.aboveMidpoint;const aboveSma50=enriched.filter(x=>x.aboveSma50===true).length,aboveBreadth=enriched.filter(x=>x.aboveReference).length,positive24h=enriched.filter(x=>x.change24h>0).length;
     const by=(key,sign=1)=>enriched.filter(x=>Number.isFinite(x[key])).sort((a,b)=>sign*(a[key]-b[key]))[0]||null;
     const breadthBull=aboveBreadth>=Math.ceil(enriched.length*2/3)&&positive24h>=Math.ceil(enriched.length*2/3),breadthBear=aboveBreadth<=Math.floor(enriched.length/3)&&positive24h<=Math.floor(enriched.length/3);
-    return{assets:enriched.length,expectedAssets:18,rows:enriched,aboveSma50,aboveBreadth,breadthBasis:allSma?'SMA50':'24h midpoint',positive24h,averageChange:enriched.length?enriched.reduce((a,x)=>a+x.change24h,0)/enriched.length:0,topGainer:by('change24h',-1),topLoser:by('change24h',1),volumeLeader:by('quoteVolume24h',-1),momentumLeader:enriched.slice().sort((a,b)=>(b.momentum?.score??-1)-(a.momentum?.score??-1))[0]||null,regime:breadthBull?'Bullish Expansion':breadthBear?'Bearish Pullback':'Range / Consolidation',asOf:Date.now()};
+    return{assets:enriched.length,expectedAssets:45,rows:enriched,aboveSma50,aboveBreadth,breadthBasis:allSma?'SMA50':'24h midpoint',positive24h,averageChange:enriched.length?enriched.reduce((a,x)=>a+x.change24h,0)/enriched.length:0,topGainer:by('change24h',-1),topLoser:by('change24h',1),volumeLeader:by('quoteVolume24h',-1),momentumLeader:enriched.slice().sort((a,b)=>(b.momentum?.score??-1)-(a.momentum?.score??-1))[0]||null,regime:breadthBull?'Bullish Expansion':breadthBear?'Bearish Pullback':'Range / Consolidation',asOf:Date.now()};
+  }
+  const WATCHED_ASSET_COUNT=45,SENTIMENT_SOURCE='Binance Spot Public API (24hr Ticker & Live WebSocket)';
+  function marketSentiment(rows,{total=WATCHED_ASSET_COUNT,now=Date.now()}={}){
+    const list=Array.isArray(rows)?rows:[];
+    const analyzed=list.filter(r=>r&&r.ticker).map(r=>{
+      const t=r.ticker,symbol=r.asset?.symbol||t.symbol||'',ticker=r.asset?.ticker||String(symbol).replace('USDT','');
+      const rawChange=t.priceChangePercent,change24h=rawChange==null||rawChange===''?NaN:Number(rawChange),last=Number(t.lastPrice),high=Number(t.highPrice),low=Number(t.lowPrice);
+      const rangePosition=Number.isFinite(high)&&Number.isFinite(low)&&Number.isFinite(last)&&high-low>0?Math.max(0,Math.min(1,(last-low)/Math.max(high-low,1e-9))):null;
+      let sentiment='Neutral';
+      if(Number.isFinite(change24h)){const bull=change24h>0.5&&(rangePosition==null||rangePosition>=0.45)||change24h>=1.25,bear=change24h<-0.5&&(rangePosition==null||rangePosition<=0.55)||change24h<=-1.25;if(bull)sentiment='Bullish';else if(bear)sentiment='Bearish'}
+      return{symbol,ticker,change24h:Number.isFinite(change24h)?change24h:null,rangePosition,rangesFromLow:rangePosition,sentiment};
+    }).filter(x=>x.change24h!==null);
+    const count=kind=>analyzed.filter(x=>x.sentiment===kind).length;
+    const totalAnalyzed=analyzed.length,bullishCount=count('Bullish'),bearishCount=count('Bearish'),neutralCount=count('Neutral');
+    const pct=n=>totalAnalyzed?Number(((n/totalAnalyzed)*100).toFixed(1)):0;
+    const bullishPct=pct(bullishCount),bearishPct=pct(bearishCount),neutralPct=Number(Math.max(0,100-bullishPct-bearishPct).toFixed(1));
+    const ranked=[['BULLISH',bullishPct],['BEARISH',bearishPct],['NEUTRAL',neutralPct]].sort((a,b)=>b[1]-a[1]);
+    return{assets:analyzed.length,totalAssetUniverse:total,totalAnalyzed,bullishCount,bearishCount,neutralCount,bullishPct,bearishPct,neutralPct,dominant:totalAnalyzed?ranked[0][0]:'NEUTRAL',dominantPct:totalAnalyzed?ranked[0][1]:0,missingCount:Math.max(0,total-analyzed.length),dataSource:SENTIMENT_SOURCE,source:'24h ticker snapshot',lastUpdated:now,classifications:analyzed};
   }
   function coinDetails({asset,ticker,candlesByTimeframe={},marketCap=null}={}){
     const matrix={};for(const tf of ['15m','1h','4h','1d']){const bars=(candlesByTimeframe[tf]||[]).filter(c=>Number.isFinite(c.close)),last=bars.at(-1),rsi=P?.rsiSeries(bars)?.at(-1)??null,ma=bars.length>=50?bars.slice(-50).reduce((s,c)=>s+c.close,0)/50:null;let trend='Neutral';if(last&&ma!=null){if(last.close>ma&&rsi!=null&&rsi>50)trend='Bullish';else if(last.close<ma&&rsi!=null&&rsi<50)trend='Bearish'}const analysis=bars.length>=80?P?.detect(bars,tf):null;matrix[tf]={trend,rsi,close:last?.close??null,observedCandles:bars.length,uptrend:analysis?.uptrend?.up??false,confirmedPivots:analysis?P.confirmedPivots(bars,'high').slice(-2).concat(P.confirmedPivots(bars,'low').slice(-2)):[]}}
@@ -53,7 +71,7 @@
   async function loadMarketCaps(assets,{fetchImpl=fetch}={}){const ids=(assets||[]).map(a=>a.cg).filter(Boolean);if(!ids.length)return new Map();const url=`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids.join(','))}`;const r=await fetchImpl(url,{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`Market-cap snapshot failed (${r.status})`);const data=await r.json();return new Map((data||[]).map(x=>[x.id,Number(x.market_cap)||null]));}
   async function scanAssets(assets,{interval='1h',limit=320,dailyLimit=60,concurrency=9,fetchImpl=fetch,onProgress=()=>{},now=Date.now(),v1Options={}}={}){
     if(!P||typeof P.detect!=='function')throw new Error('Pattern engine not loaded');
-    const priority=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],rank=new Map(priority.map((symbol,index)=>[symbol,index])),ordered=[...assets].sort((a,b)=>(rank.get(a.symbol)??priority.length)-(rank.get(b.symbol)??priority.length));
+    const priority=['BTCUSDT','ETHUSDT','XRPUSDT','SOLUSDT','TRXUSDT','BCHUSDT'],rank=new Map(priority.map((symbol,index)=>[symbol,index])),ordered=[...assets].sort((a,b)=>(rank.get(a.symbol)??priority.length)-(rank.get(b.symbol)??priority.length));
     const results=Array(ordered.length);let next=0,done=0;
     const tickerTask=loadAllTickers({fetchImpl,symbols:ordered.map(a=>a.symbol)}).catch(()=>new Map());
     const worker=async()=>{while(next<ordered.length){const i=next++,asset=ordered[i];try{
@@ -76,5 +94,5 @@
   function getMatches(results){return results.flatMap(r=>r.analysis?r.analysis.current.map(event=>({...event,asset:r.asset,interval:r.interval})):[]).sort((a,b)=>(b.time||0)-(a.time||0));}
   function getBacktests(results){return results.flatMap(r=>r.analysis?Object.entries(r.analysis.stats).map(([pattern,stats])=>({asset:r.asset,interval:r.interval,pattern,...stats})):[]);}
   function getV1Matches(results){return results.filter(r=>r.v1?.match).map(r=>({...r.v1.match,asset:r.asset,interval:'1h',v1:r.v1}));}
-  return {fetchBinanceJson,loadCandles,load24hQuoteVolume,loadAllTickers,loadMarketCaps,momentumScore,marketOverview,coinDetails,scanAssets,getMatches,getBacktests,getV1Matches,CACHE_TTL,MIRRORS};
+  return {fetchBinanceJson,loadCandles,load24hQuoteVolume,loadAllTickers,loadMarketCaps,momentumScore,marketOverview,marketSentiment,WATCHED_ASSET_COUNT,SENTIMENT_SOURCE,coinDetails,scanAssets,getMatches,getBacktests,getV1Matches,CACHE_TTL,MIRRORS};
 });
