@@ -239,3 +239,38 @@ html[data-theme="light"] .orderbook .spread{background:#F1F5F9;color:#334155}htm
 html[data-theme="light"] .orderbook #book-price{color:#0F172A!important}html[data-theme="light"] .orderbook .mid-price .up{color:#059669!important}html[data-theme="light"] .orderbook .mid-price .down{color:#DC2626!important}
 /* Keep this final rule too: component styles must never expose a closed select popover. */
 [hidden],.bp-select-menu[hidden],.bp-custom-select-menu[hidden],.bp-select-popover[hidden],.bp-select-menu:not(.is-open),.bp-custom-select-menu:not(.is-open){display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+
+/* Market breadth & sentiment analysis (45 tracked USDT pairs, public 24h ticker + live socket) */
+.bp-breadth{margin:10px 16px 0;padding:10px 12px;border:1px solid var(--bp-border-hairline);border-radius:10px;background:linear-gradient(110deg,var(--bp-bg-primary),var(--bp-bg-elevated));color:var(--bp-text-primary);box-shadow:var(--bp-shadow-card);font:11px Inter,ui-sans-serif,system-ui,sans-serif}
+.bp-breadth-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font:10px var(--mono,ui-monospace,monospace)}
+.bp-breadth-head>b{letter-spacing:.12em;color:var(--bp-accent-gold,#D6AD55)}
+.bp-breadth-head>span{margin-left:auto;color:var(--bp-text-muted,#94A3B8);font-variant-numeric:tabular-nums}
+.bp-breadth-body{display:flex;gap:16px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.bp-donut-wrap{position:relative;flex:none;width:80px;height:80px}
+.bp-donut{width:80px;height:80px;display:block}
+.bp-donut-track{fill:none;stroke:rgba(148,163,184,.18);stroke-width:12}
+.bp-donut-seg{fill:none;stroke-width:12;stroke-linecap:butt;transition:stroke-dasharray .35s ease,stroke-dashoffset .35s ease,opacity .35s ease}
+.bp-donut-seg.seg-bull{stroke:#10B981}
+.bp-donut-seg.seg-neut{stroke:#64748B}
+.bp-donut-seg.seg-bear{stroke:#F23645}
+.bp-donut-center{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:1px;text-align:center;pointer-events:none}
+.bp-donut-center b{font:700 9px var(--mono,ui-monospace,monospace);letter-spacing:.04em;line-height:1.1}
+.bp-donut-center span{font:600 9px var(--mono,ui-monospace,monospace);color:var(--bp-text-muted,#94A3B8);font-variant-numeric:tabular-nums}
+.bp-breadth-main{flex:1 1 320px;min-width:0;display:grid;gap:9px}
+.bp-breadth-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:rgba(148,163,184,.16);border:1px solid var(--bp-border-hairline,rgba(148,163,184,.25))}
+.bp-breadth-seg{display:block;height:100%;transition:width .35s ease}
+.bp-breadth-seg.seg-bull{background:#10B981}
+.bp-breadth-seg.seg-neut{background:#64748B}
+.bp-breadth-seg.seg-bear{background:#F23645}
+.bp-breadth-legend{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.bp-breadth-metric{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--bp-border-hairline,rgba(148,163,184,.25));border-radius:7px;background:rgba(127,146,170,.06);font:10px var(--mono,ui-monospace,monospace);font-variant-numeric:tabular-nums;min-width:0}
+.bp-breadth-metric span{color:var(--bp-text-muted,#94A3B8);font-size:9px;letter-spacing:.06em;text-transform:uppercase}
+.bp-breadth-metric b{margin-left:auto;font-weight:700}
+.bp-breadth-metric small{color:var(--bp-text-muted,#94A3B8);font-size:9px;white-space:nowrap}
+.bp-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.bp-dot.seg-bull{background:#10B981}
+.bp-dot.seg-neut{background:#64748B}
+.bp-dot.seg-bear{background:#F23645}
+.bp-breadth-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font:9px var(--mono,ui-monospace,monospace);color:var(--bp-text-muted,#94A3B8);font-variant-numeric:tabular-nums}
+.bp-breadth-meta b{color:var(--bp-text-primary,#E5EDF4);font-weight:600}
+@media(max-width:600px){.bp-breadth{margin:8px 8px 0;padding:9px}.bp-breadth-legend{grid-template-columns:1fr}.bp-donut-wrap,.bp-donut{width:68px;height:68px}.bp-breadth-body{gap:10px}}
