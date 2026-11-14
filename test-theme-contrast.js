@@ -313,5 +313,23 @@ assert.equal(dispatched[0].type, 'bp-breadth-update');
 assert.equal(dispatched[0].detail.bullishPct, 44.4);
 assert.match(breadthNodes['mb-bar'].attrs['aria-label'], /Bullish 44\.4% \(20 assets\)/);
 
+
+// ---- external scripts must be empty; the terminal API must live in an inline script ----
+const scriptTags = [...index.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+assert.ok(scriptTags.length >= 5, 'index.html script tags are parsed');
+for (const [, attrs, body] of scriptTags) {
+  if (/\bsrc\s*=/.test(attrs)) {
+    assert.equal(body.trim(), '', `a script with src must have no inline content: <script${attrs}>`);
+  }
+}
+assert.match(index, /<script type="module" src="bluepeak-access-ui\.js"><\/script>/, 'the module script tag is closed before any inline code');
+const apiScripts = scriptTags.filter(([, attrs, body]) => !/\bsrc\s*=/.test(attrs) && /window\.BluePeakTerminal\s*=/.test(body));
+assert.equal(apiScripts.length, 1, 'window.BluePeakTerminal is defined exactly once, in a standalone inline script');
+assert.equal(apiScripts[0][1], '', 'that inline script carries no attributes, so it actually executes');
+assert.match(apiScripts[0][2], /getMarketBreadth/, 'the exposed terminal API includes getMarketBreadth');
+assert.match(apiScripts[0][2], /hydrateMarketOverviewCache\(\)/, 'the load hook that warms the market overview survives');
+assert.doesNotMatch(index, /<script[^>]*\bsrc=[^>]*>[^<\s]/, 'no script with a src attribute contains inline JavaScript');
+assert.ok(!fs.existsSync(path.join(__dirname, 'AGENTS.md')), 'internal agent instructions must not ship in the repository');
+
 console.log(`PASS test-theme-contrast: dual theme tokens, >=AA text pairs, AAA primary/button pairs, synchronized theme controls, resolved chart palette, universal candle colors, Zig Zag UI, and no unapproved green colors (${sourceFiles.length} shipped source files scanned).`);
 })().catch(error=>{console.error(error);process.exitCode=1});
