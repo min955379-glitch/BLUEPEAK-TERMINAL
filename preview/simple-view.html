@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BluePeak Terminal — Simple view preview (design direction only)</title>
+<style>
+  /* ============ Palette A — Cream & Ink (design direction, preview only) ============ */
+  :root{
+    --bg:#F5F0E6; --surface:#FFFFFF; --surface-2:#FBF8F1; --selected:#EFE8D8;
+    --line:#DDD5C5; --text:#141412; --text-2:#45433E; --muted:#6B6860;
+    --neutral:#8A877E; --gold:#A8861A;
+    --up:#089981; --down:#F23645; --up-text:#067A66; --down-text:#C42030;
+    --warn-bg:#FBF1DC; --warn-text:#7A4F00;
+    --radius:6px; --touch:48px;
+    --scale-12:12px; --scale-14:14px; --scale-16:16px; --scale-20:20px; --scale-28:28px; --scale-40:40px;
+    --sans:Inter,ui-sans-serif,system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  [data-theme="dark"]{
+    --bg:#0F0F0E; --surface:#181816; --surface-2:#20201D; --selected:#26251F;
+    --line:#2E2D29; --text:#F2EDE2; --text-2:#C9C4B8; --muted:#A09B90;
+    --neutral:#A09B90; --gold:#D4B04A;
+    --up:#089981; --down:#F23645; --up-text:#089981; --down-text:#F23645;
+    --warn-bg:#2A1B00; --warn-text:#D4B04A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{font-family:var(--sans); -webkit-tap-highlight-color:transparent}
+  body{background:var(--bg); color:var(--text); font-size:var(--scale-16); line-height:1.5; margin:0}
+  a{color:var(--text); text-decoration:underline}
+  button,input,select,textarea{font:inherit; color:inherit}
+  :focus-visible{outline:2px solid var(--text); outline-offset:2px}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+
+  /* ============ Layout shell ============ */
+  #app{display:flex; flex-direction:column; min-height:100vh}
+  header{background:var(--surface); border-bottom:1px solid var(--line); padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; position:sticky; top:0; z-index:10}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:600; font-size:var(--scale-20); letter-spacing:-0.02em}
+  .mark{width:26px; height:26px; border-radius:var(--radius); background:var(--gold); display:grid; place-items:center; color:#fff; font-weight:700; font-size:12px}
+  .mood{font-size:var(--scale-14); color:var(--text-2); white-space:nowrap}
+  .topright{display:flex; align-items:center; gap:8px}
+  .theme-toggle{background:none; border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:var(--radius); font-size:var(--scale-14); cursor:pointer; min-height:var(--touch); min-width:var(--touch)}
+  .advanced-toggle{background:var(--surface-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:var(--radius); font-size:var(--scale-14); cursor:pointer; min-height:var(--touch); min-width:var(--touch)}
+
+  /* ============ Market mood (breadth) ============ */
+  .mood-section{padding:20px 16px}
+  .mood-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px}
+  .mood-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px}
+  .mood-title{font-size:var(--scale-28); font-weight:600}
+  .mood-sub{font-size:var(--scale-14); color:var(--muted)}
+  .donut{width:96px; height:96px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); display:grid; place-items:center; margin:0 auto 12px; font-family:var(--mono)}
+  .donut .big{font-size:var(--scale-20); font-weight:700}
+  .donut .small{font-size:var(--scale-12); color:var(--muted)}
+  .bar{height:10px; border-radius:6px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden; margin-top:14px}
+  .bar .seg{height:100%; float:left}
+  .bar .bull{background:var(--up)}
+  .bar .neut{background:var(--neutral)}
+  .bar .bear{background:var(--down)}
+  .legend{display:flex; justify-content:center; gap:16px; margin-top:10px}
+  .metric{display:flex; flex-direction:column; align-items:center; gap:4px}
+  .metric .dot{width:10px; height:10px; border-radius:50%}
+  .metric .dot.bull{background:var(--up)}
+  .metric .dot.neut{background:var(--neutral)}
+  .metric .dot.bear{background:var(--down)}
+  .metric b{font-size:var(--scale-14); font-family:var(--mono)}
+  .metric span{font-size:var(--scale-12); color:var(--muted)}
+  .meta{margin-top:12px; font-size:var(--scale-12); color:var(--muted); text-align:center}
+  .meta b{color:var(--text)}
+
+  /* ============ Watchlist ============ */
+  .watch-section{padding:0 16px 28px}
+  .watch-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .watch-title{font-size:var(--scale-20); font-weight:600}
+  .search{position:relative}
+  .search input{width:220px; background:var(--surface-2); border:1px solid var(--line); color:var(--text); padding:10px 12px 10px 36px; border-radius:var(--radius); font-size:var(--scale-14)}
+  .search::before{content:""; position:absolute; left:11px; top:50%; transform:translateY(-50%); width:16px; height:16px; border:1.5px solid var(--muted); border-radius:50%}
+  .search::after{content:""; position:absolute; left:19px; top:66%; width:6px; height:6px; background:var(--muted); border-radius:50%; transform:rotate(45deg) translate(1px,1px)}
+  table.watch{width:100%; border-collapse:collapse; font-size:var(--scale-14)}
+  table.watch thead th{text-align:left; color:var(--muted); font-weight:600; padding:10px 12px; font-size:var(--scale-12); border-bottom:2px solid var(--line); white-space:nowrap}
+  table.watch thead th.num{text-align:right}
+  table.watch tbody td{border-bottom:1px solid var(--line); padding:10px 12px; vertical-align:middle}
+table.watch tbody tr:hover{background:var(--selected)}
+table.watch tbody tr.active{background:var(--selected)}
+  .coin{display:flex; align-items:center; gap:10px}
+  .coin-icon{width:30px; height:30px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); display:grid; place-items:center; font-family:var(--mono); font-size:12px; font-weight:700; color:var(--gold)}
+  .coin-name{font-weight:600}
+  .coin-sym{color:var(--muted); font-size:var(--scale-12)}
+  .price{font-family:var(--mono)}
+  .change{font-family:var(--mono); font-weight:600}
+  .change.up{color:var(--up-text)}
+  .change.down{color:var(--down-text)}
+  .change::before{content:"▲ "; color:inherit}
+  .change.down::before{content:"▼ "; color:inherit}
+  .footer-note{margin-top:16px; font-size:var(--scale-12); color:var(--muted); text-align:center}
+
+  /* ============ Chart (placeholder) ============ */
+  .chart-wrap{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); height:330px; display:grid; place-items:center; color:var(--muted); font-size:var(--scale-14); margin:0 16px 28px; position:relative}
+  .chart-wrap::after{content:"Chart"; position:absolute; right:12px; bottom:10px; font-family:var(--mono); font-size:var(--scale-12); opacity:0.5}
+
+  /* ============ Bottom nav (mobile) ============ */
+  .bottom-nav{display:none; position:sticky; bottom:0; background:var(--surface); border-top:1px solid var(--line); padding:8px 4px; display:flex; justify-content:space-around; z-index:20}
+  .nav-item{display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--muted); text-decoration:none; font-size:var(--scale-12); min-height:var(--touch); min-width:var(--touch)}
+  .nav-item.active{color:var(--gold)}
+  .nav-item svg{width:22px; height:22px}
+
+  /* ============ Tablet / desktop ============ */
+  @media (min-width:768px){
+    #app{max-width:1000px; margin:0 auto}
+    header{padding:16px 24px}
+    .mood-section{padding:28px 24px 0}
+    .watch-section{padding:0 24px 40px}
+    .chart-wrap{margin:0 24px 40px; height:420px}
+    .search input{width:280px}
+    .bottom-nav{display:none} /* desktop uses header actions instead */
+  }
+
+  /* theme chip */
+  .chip{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px}
+  .chip.light{background:#F5F0E6; border:1px solid var(--line)}
+  .chip.dark{background:#0F0F0E; border:1px solid var(--line)}
+</style>
+</head>
+<body data-theme="light">
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="mark">BP</div>
+      <div>BluePeak Terminal</div>
+    </div>
+    <div class="mood" id="live-mood">Market mood: loading…</div>
+    <div class="topright">
+      <button class="theme-toggle" aria-label="Switch theme">Theme</button>
+      <button class="advanced-toggle" aria-label="Open advanced tools">Advanced view</button>
+    </div>
+  </header>
+
+  <section class="mood-section" aria-label="Market mood">
+    <div class="mood-card">
+      <div class="mood-head">
+        <div>
+          <div class="mood-title">Market mood</div>
+          <div class="mood-sub">How many of the 45 watched coins are rising vs falling</div>
+        </div>
+        <div class="donut"><div class="big">—</div><div class="small">—%</div></div>
+      </div>
+      <div class="bar" role="img" aria-label="Bullish / neutral / bearish share">
+        <span class="seg bull" style="width:0%"></span>
+        <span class="seg neut" style="width:0%"></span>
+        <span class="seg bear" style="width:0%"></span>
+      </div>
+      <div class="legend">
+        <div class="metric"><div class="dot bull"></div><span>Rising</span><b id="p-bull">—</b><small id="c-bull">—</small></div>
+        <div class="metric"><div class="dot neut"></div><span>Flat</span><b id="p-neut">—</b><small id="c-neut">—</small></div>
+        <div class="metric"><div class="dot bear"></div><span>Falling</span><b id="p-bear">—</b><small id="c-bear">—</small></div>
+      </div>
+      <div class="meta">
+        <span>Assets Analyzed: <b id="total">0</b> / 45</span>
+        <span>· Data: Binance Spot public API (live)</span>
+        <span>· Updated <b id="stamp">—</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="watch-section" aria-label="Watchlist">
+    <div class="watch-head">
+      <div class="watch-title">Watchlist — 45 coins</div>
+      <div class="search"><input type="search" placeholder="Search coin…" aria-label="Filter watchlist"></div>
+    </div>
+    <table class="watch" aria-label="45 USDT pairs">
+      <thead>
+        <tr><th>Coin</th><th class="num">Price</th><th class="num">Price change, last 24 hours</th></tr>
+      </thead>
+      <tbody id="coin-list">
+        <!-- rows injected by JS preview data -->
+      </tbody>
+    </table>
+    <div class="footer-note">Market data only. Not trading advice. Prices update every few seconds.</div>
+  </section>
+
+  <div class="chart-wrap" aria-label="Chart placeholder">Chart placeholder — clean canvas chart, touch-friendly, with “reset zoom”</div>
+
+  <nav class="bottom-nav" aria-label="Bottom navigation">
+    <a class="nav-item active" href="#"><svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4.42 7.07 7.07L18.34 15.36 12 8.91l-6.34 6.35L1.66 15.36 19.07 13.49z" fill="currentColor" fill-rule="evenodd"/></svg><span>Mood</span></a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zm0 4v2h6v-2H3zm0-8v2h6V9H3zm10-2h-4V1h4v10zm4 8v-2h-6v2h6z" fill="currentColor" fill-rule="evenodd"/></svg><span>Watchlist</span></a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 16H6v-4h12v4zm0-6H6V7h12v6z" fill="currentColor" fill-rule="evenodd"/></svg><span>Chart</span></a>
+  </nav>
+</div>
+
+<script>
+// Preview-only mock data (NOT live, NOT part of the site)
+const coins = [
+  ["BTC","Bitcoin",109342.50,2.4],["ETH","Ethereum",3584.20,-0.9],["XRP","XRP",2.4140,1.2],
+  ["SOL","Solana",174.80,3.1],["TRX","TRON",0.2460,-1.4],["BCH","Bitcoin Cash",492.10,0.3],
+  ["ADA","Cardano",0.8420,-2.1],["DOT","Polkadot",5.6200,1.7],["LTC","Litecoin",91.40,-0.6],
+  ["AVAX","Avalanche",32.90,2.8],["LINK","Chainlink",19.40,-1.3],["XLM","Stellar",0.3120,0.5],
+  ["HBAR","Hedera",0.07820,4.2],["SUI","Sui",2.1400,-1.9],["TON","Toncoin",5.4200,0.8],
+  ["NEAR","NEAR",4.3600,-2.4],["ETC","Ethereum Classic",24.60,0.1],["FIL","Filecoin",4.8200,-3.1],
+  ["ATOM","Cosmos",5.9800,1.5],["VET","VeChain",0.02980,-0.4],["ALGO","Algorand",0.2840,2.1],
+  ["APT","Aptos",6.2400,-1.7],["ARB","Arbitrum",0.6120,0.9],["OP","Optimism",1.6800,-2.2],
+  ["STX","Stacks",1.3400,3.4],["TIA","Celestia",4.1800,-1.1],["SEI","Sei",0.2940,1.8],
+  ["JASMY","Jasmy",0.02140,-0.7],["GRT","The Graph",0.1240,0.3],["RENDER","Render",5.6200,2.6],
+  ["PYTH","Pyth",0.2460,-1.5],["IOTA","IOTA",0.1840,0.9],["ZIL","Zilliqa",0.01940,-0.3],
+  ["CKB","Nervos",0.01420,1.1],["XEC","eCash",0.00003420,-2.0],["TAO","Bittensor",384.20,4.7],
+  ["BAT","Basic Attention Token",0.1840,-0.8],["LPT","Livepeer",9.2400,1.4],["POL","Polygon",0.4120,-1.6],
+  ["THETA","Theta",1.3400,0.6],["TWT","Trust Wallet",0.9840,-2.3],["ZRO","LayerZero",4.3600,1.9],
+  ["MASK","Mask Network",2.4140,-1.1],["NEO","Neo",12.4000,0.4],["EGLD","MultiversX",24.60,-1.9]
+];
+
+function render(){
+  const list=document.getElementById('coin-list');
+  list.innerHTML='';
+  let bull=0,bear=0,neu=0;
+  coins.forEach(([sym,name,price,ch])=>{
+    const up = ch>=0;
+    if(ch>0.5)bull++; else if(ch<-0.5)bear++; else neu++;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><div class="coin"><div class="coin-icon">${sym.slice(0,2)}</div><div><div class="coin-name">${name}</div><div class="coin-sym">${sym}USDT</div></div></div></td>
+      <td class="num price mono">${price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})}</td>
+      <td class="num change mono ${up?'up':'down'}">${ch>=0?'+':''}${ch.toFixed(2)}%</td>
+    `;
+    list.appendChild(tr);
+  });
+  const total=coins.length;
+  const pb=Math.round(bull/total*100),pn=Math.round(neu/total*100),pbr=Math.round(bear/total*100);
+  document.getElementById('p-bull').textContent=pb+'%';
+  document.getElementById('p-neut').textContent=pn+'%';
+  document.getElementById('p-bear').textContent=pbr+'%';
+  document.getElementById('c-bull').textContent=bull;
+  document.getElementById('c-neut').textContent=neu;
+  document.getElementById('c-bear').textContent=bear;
+  document.getElementById('total').textContent=total;
+  document.getElementById('stamp').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('live-mood').textContent=`Market mood: ${bull} of ${total} coins rising`;
+  document.querySelector('.seg.bull').style.width=pb+'%';
+  document.querySelector('.seg.neut').style.width=pn+'%';
+  document.querySelector('.seg.bear').style.width=pbr+'%';
+}
+render();
+setInterval(render,30000); // preview only: re-randomizes nothing, just re-stamps time
+
+// Theme toggle preview
+document.querySelector('.theme-toggle').addEventListener('click',()=>{
+  const html=document.documentElement;
+  const isDark=html.dataset.theme==='dark';
+  html.dataset.theme=isDark?'light':'dark';
+  document.querySelector('.theme-toggle').textContent=isDark?'Switch to dark':'Switch to light';
+});
+</script>
+</body>
+</html>
